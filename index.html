@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Investment Tracker Pro v4.0</title>
+    <title>Investment Tracker Pro v4.1 - CORS Fix</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.sheetjs.com/xlsx-0.20.0/package/dist/xlsx.full.min.js"></script>
     <style>
@@ -800,7 +800,7 @@
                     <circle cx="24" cy="12" r="2" fill="#00c9a7"/>
                 </svg>
                 <div>
-                    <h1>Investment Tracker Pro <span class="version-badge">v4.0</span></h1>
+                    <h1>Investment Tracker Pro <span class="version-badge">v4.1</span></h1>
                 </div>
             </div>
             <div class="header-actions">
@@ -4173,36 +4173,183 @@
             }
         }
 
-        async function obtenerPrecioYahoo(ticker) {
-            console.log('Consultando Yahoo Finance:', ticker);
+
+        // SISTEMA DE DIAGNOSTICO MEJORADO - V4.1
+        
+        function diagnosticarConexion() {
+            console.log('=== DIAGNOSTICO DE CONEXION ===');
             
-            try {
-                const url = `https://query1.finance.yahoo.com/v8/finance/chart/${ticker}`;
-                const response = await fetch(url);
-                
-                if (!response.ok) {
-                    console.error('Yahoo Finance HTTP error:', response.status);
-                    return null;
-                }
-                
-                const data = await response.json();
-                
-                if (data.chart && data.chart.result && data.chart.result[0]) {
-                    const result = data.chart.result[0];
-                    return {
-                        precio: result.meta.regularMarketPrice,
-                        moneda: result.meta.currency || 'USD'
-                    };
-                }
-                
-                console.error('Yahoo Finance: estructura de datos invalida');
-                return null;
-                
-            } catch (error) {
-                console.error('Error consultando Yahoo Finance:', error);
-                return null;
+            // Test 1: Verificar que fetch funciona
+            console.log('1. Probando fetch API...');
+            if (typeof fetch === 'undefined') {
+                console.error('ERROR: fetch no disponible');
+                return;
             }
+            console.log('   OK: fetch disponible');
+            
+            // Test 2: Probar Yahoo Finance con ticker simple
+            console.log('2. Probando Yahoo Finance con AAPL...');
+            fetch('https://query1.finance.yahoo.com/v8/finance/chart/AAPL')
+                .then(response => {
+                    console.log('   Respuesta HTTP:', response.status, response.statusText);
+                    if (!response.ok) {
+                        console.error('   ERROR: Yahoo Finance no responde correctamente');
+                        console.error('   Posibles causas:');
+                        console.error('   - CORS bloqueado por el navegador');
+                        console.error('   - Yahoo Finance bloquea tu IP');
+                        console.error('   - Firewall o antivirus bloqueando');
+                        return null;
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    if (!data) return;
+                    console.log('   Datos recibidos:', data);
+                    if (data.chart && data.chart.result && data.chart.result[0]) {
+                        const precio = data.chart.result[0].meta.regularMarketPrice;
+                        console.log('   OK: Precio AAPL =', precio, 'USD');
+                    } else {
+                        console.error('   ERROR: Estructura de datos invalida');
+                        console.error('   Respuesta:', JSON.stringify(data, null, 2));
+                    }
+                })
+                .catch(error => {
+                    console.error('   ERROR de red:', error);
+                    console.error('   Mensaje:', error.message);
+                    console.error('   Esto puede ser:');
+                    console.error('   - CORS policy bloqueando la peticion');
+                    console.error('   - No hay conexion a internet');
+                    console.error('   - Yahoo Finance no accesible desde tu ubicacion');
+                });
+            
+            // Test 3: Probar API de tasas de cambio
+            console.log('3. Probando API de tasas de cambio...');
+            fetch('https://api.exchangerate-api.com/v4/latest/USD')
+                .then(response => {
+                    console.log('   Respuesta HTTP:', response.status);
+                    return response.json();
+                })
+                .then(data => {
+                    console.log('   Tasa USD a EUR:', data.rates.EUR);
+                    console.log('   OK: API de cambio funciona');
+                })
+                .catch(error => {
+                    console.error('   ERROR:', error.message);
+                });
+            
+            console.log('4. Verificando localStorage...');
+            try {
+                localStorage.setItem('test', 'test');
+                localStorage.removeItem('test');
+                console.log('   OK: localStorage funciona');
+            } catch (e) {
+                console.error('   ERROR: localStorage no disponible');
+            }
+            
+            console.log('\n=== FIN DEL DIAGNOSTICO ===');
+            console.log('Copia todos los mensajes de arriba si necesitas ayuda');
         }
+
+        // Funcion mejorada con mas detalles de error
+        // VERSION 4.1 - Yahoo Finance con CORS Proxy
+        async function obtenerPrecioYahoo(ticker) {
+            console.log('obtenerPrecioYahoo: consultando', ticker);
+            
+            // SOLUCION CORS: Usar proxy gratuito
+            // Alternativas de proxy CORS (si uno falla, probar otro):
+            const proxies = [
+                'https://api.allorigins.win/raw?url=',
+                'https://corsproxy.io/?',
+                'https://api.codetabs.com/v1/proxy?quest='
+            ];
+            
+            const yahooUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${ticker}`;
+            
+            // Intentar con cada proxy
+            for (let i = 0; i < proxies.length; i++) {
+                const proxy = proxies[i];
+                const url = proxy + encodeURIComponent(yahooUrl);
+                
+                console.log(`Intento ${i + 1}: Usando proxy ${proxy}`);
+                
+                try {
+                    const response = await fetch(url, {
+                        method: 'GET',
+                        headers: {
+                            'Accept': 'application/json'
+                        }
+                    });
+                    
+                    console.log('HTTP Status:', response.status, response.statusText);
+                    
+                    if (!response.ok) {
+                        console.warn(`Proxy ${i + 1} fallo con status ${response.status}`);
+                        continue; // Probar siguiente proxy
+                    }
+                    
+                    const text = await response.text();
+                    
+                    let data;
+                    try {
+                        data = JSON.parse(text);
+                    } catch (e) {
+                        console.error('Error parseando JSON:', e);
+                        continue; // Probar siguiente proxy
+                    }
+                    
+                    if (!data.chart || !data.chart.result || !data.chart.result[0]) {
+                        console.warn('Estructura de datos invalida');
+                        continue; // Probar siguiente proxy
+                    }
+                    
+                    const result = data.chart.result[0];
+                    const precio = result.meta.regularMarketPrice;
+                    const moneda = result.meta.currency || 'USD';
+                    
+                    if (!precio) {
+                        console.warn('No se encontro precio');
+                        continue; // Probar siguiente proxy
+                    }
+                    
+                    console.log('EXITO con proxy', i + 1, '- Precio:', precio, moneda);
+                    return { precio, moneda };
+                    
+                } catch (error) {
+                    console.warn(`Proxy ${i + 1} error:`, error.message);
+                    continue; // Probar siguiente proxy
+                }
+            }
+            
+            // Si todos los proxies fallaron, intentar directo (por si acaso funciona)
+            console.log('Todos los proxies fallaron, intentando conexion directa...');
+            try {
+                const response = await fetch(yahooUrl);
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data.chart && data.chart.result && data.chart.result[0]) {
+                        const result = data.chart.result[0];
+                        return {
+                            precio: result.meta.regularMarketPrice,
+                            moneda: result.meta.currency || 'USD'
+                        };
+                    }
+                }
+            } catch (e) {
+                console.error('Conexion directa tambien fallo:', e.message);
+            }
+            
+            console.error('ERROR: No se pudo obtener precio de ninguna fuente');
+            return null;
+        }
+
+
+
+        // Agregar boton de diagnostico al HTML
+        window.addEventListener('load', function() {
+            console.log('Investment Tracker v4.1 cargado');
+            console.log('Ejecuta diagnosticarConexion() en la consola para probar la conexion');
+        });
+
 
         async function obtenerTasaCambioSimple(divisaOrigen) {
             if (divisaOrigen === 'EUR') return 1;
