@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Investment Tracker Pro v4.1 - CORS Fix</title>
+    <title>Investment Tracker Pro v4.2 - Firefox Fix + Céntimos</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.sheetjs.com/xlsx-0.20.0/package/dist/xlsx.full.min.js"></script>
     <style>
@@ -800,7 +800,7 @@
                     <circle cx="24" cy="12" r="2" fill="#00c9a7"/>
                 </svg>
                 <div>
-                    <h1>Investment Tracker Pro <span class="version-badge">v4.1</span></h1>
+                    <h1>Investment Tracker Pro <span class="version-badge">v4.2</span></h1>
                 </div>
             </div>
             <div class="header-actions">
@@ -1940,21 +1940,78 @@
         }
 
         // -- Obtener tasa de cambio EUR/USD desde API --
+        // Convertir precio según la moneda (detectar céntimos)
+        function convertirPrecioSegunMoneda(precio, moneda) {
+            // Monedas en céntimos que necesitan conversión a unidad base
+            const monedasEnCentimos = {
+                'GBp': 100,  // Peniques británicos → Libras (GBP)
+                'GBX': 100,  // Peniques británicos → Libras (GBP)
+                'ZAc': 100,  // Centavos sudafricanos → Rand (ZAR)
+                'ILa': 100,  // Agorot israelíes → Shekel (ILS)
+                'ILA': 100   // Agorot israelíes → Shekel (ILS)
+            };
+            
+            // Si la moneda está en céntimos, convertir
+            if (monedasEnCentimos[moneda]) {
+                const divisor = monedasEnCentimos[moneda];
+                const precioConvertido = precio / divisor;
+                const monedaBase = moneda === 'GBp' || moneda === 'GBX' ? 'GBP' : 
+                                   moneda === 'ZAc' ? 'ZAR' : 
+                                   moneda === 'ILa' || moneda === 'ILA' ? 'ILS' : moneda;
+                
+                console.log(`Conversión de céntimos: ${precio} ${moneda} = ${precioConvertido} ${monedaBase}`);
+                
+                return {
+                    precio: precioConvertido,
+                    moneda: monedaBase,
+                    esCentimos: true,
+                    precioOriginalCentimos: precio
+                };
+            }
+            
+            // Si no es en céntimos, devolver tal cual
+            return {
+                precio: precio,
+                moneda: moneda,
+                esCentimos: false
+            };
+        }
+        
+        // Obtener tasa de cambio (actualizada con más monedas)
         async function obtenerTasaCambio(divisaOrigen) {
             if (divisaOrigen === 'EUR') return 1;
             
             try {
-                // Usar API de exchangerate-api (gratuita)
                 const response = await fetch(`https://api.exchangerate-api.com/v4/latest/${divisaOrigen}`);
                 const data = await response.json();
                 return data.rates.EUR || 1;
             } catch (error) {
-                console.error('Error obteniendo tasa de cambio:', error);
-                // Fallback: tasas aproximadas
-                const fallback = { 'USD': 0.92, 'GBP': 1.16, 'JPY': 0.0063, 'CHF': 1.05 };
-                return fallback[divisaOrigen] || 1;
+                console.warn('Error obteniendo tasa de cambio, usando fallback');
+                
+                // Tasas de fallback actualizadas
+                const fallbackRates = {
+                    'USD': 0.92,
+                    'GBP': 1.16,
+                    'JPY': 0.0063,
+                    'CHF': 1.05,
+                    'CAD': 0.68,
+                    'AUD': 0.61,
+                    'NZD': 0.56,
+                    'SEK': 0.088,
+                    'NOK': 0.089,
+                    'DKK': 0.134,
+                    'PLN': 0.23,
+                    'CZK': 0.041,
+                    'HUF': 0.0026,
+                    'ZAR': 0.051,
+                    'ILS': 0.25
+                };
+                
+                return fallbackRates[divisaOrigen] || 1;
             }
         }
+
+
         // -- Obtener valor actual de una inversión (auto-calculado si tiene acciones+precio) --
         // Obtener valor actual de una inversion - VERSION 4.0
         function getValorActual(inv) {
@@ -4067,8 +4124,9 @@
         // ACTUALIZACION DE PRECIOS - VERSION 4.0 SIMPLIFICADA
         // ================================================================
 
+        // VERSION 4.2 - Con detección de céntimos y mejor compatibilidad Firefox
         async function actualizarPrecioInversion(invId) {
-            console.log('=== INICIANDO ACTUALIZACION DE PRECIO ===');
+            console.log('=== ACTUALIZANDO PRECIO ===');
             console.log('ID inversion:', invId);
             
             const inv = inversiones.find(i => i.id === invId);
@@ -4087,26 +4145,28 @@
             console.log('Inversion:', inv.nombre);
             console.log('Ticker original:', inv.ticker);
             
-            // Normalizar ticker
             const tickerNormalizado = normalizarTicker(inv.ticker);
             console.log('Ticker normalizado:', tickerNormalizado);
 
             mostrarNotificacion('Actualizando precio de ' + inv.nombre + '...', 'info');
 
             try {
-                // 1. Obtener precio de Yahoo Finance
+                // 1. Obtener precio de Yahoo Finance (con proxy CORS)
                 const datosPrecio = await obtenerPrecioYahoo(tickerNormalizado);
                 
                 if (!datosPrecio) {
                     throw new Error('No se pudo obtener precio de Yahoo Finance');
                 }
 
-                console.log('Precio obtenido:', datosPrecio);
+                console.log('Datos obtenidos de Yahoo:', datosPrecio);
 
-                // 2. Calcular o usar numero de acciones
+                // 2. Convertir si está en céntimos (GBp, GBX, etc.)
+                const datosConvertidos = convertirPrecioSegunMoneda(datosPrecio.precio, datosPrecio.moneda);
+                console.log('Después de conversión céntimos:', datosConvertidos);
+
+                // 3. Calcular número de acciones
                 let numAcciones = inv.numAcciones;
                 
-                // Si tiene movimientos, calcular desde ahi
                 if (inv.movimientos && inv.movimientos.length > 0) {
                     let totalAcciones = 0;
                     inv.movimientos.forEach(m => {
@@ -4121,23 +4181,23 @@
                     }
                 }
                 
-                // Si aun no tiene, calcular desde inversion inicial
                 if (!numAcciones && inv.inversionInicial) {
-                    numAcciones = inv.inversionInicial / datosPrecio.precio;
+                    numAcciones = inv.inversionInicial / datosConvertidos.precio;
                     console.log('Acciones calculadas desde inversion inicial:', numAcciones);
                 }
 
-                // 3. Convertir precio a EUR si es necesario
-                let precioEUR = datosPrecio.precio;
+                // 4. Convertir precio a EUR
+                let precioEUR = datosConvertidos.precio;
                 let tasaCambio = 1;
                 
-                if (datosPrecio.moneda !== 'EUR') {
-                    tasaCambio = await obtenerTasaCambioSimple(datosPrecio.moneda);
-                    precioEUR = datosPrecio.precio * tasaCambio;
-                    console.log('Conversion:', datosPrecio.precio, datosPrecio.moneda, '=', precioEUR, 'EUR');
+                if (datosConvertidos.moneda !== 'EUR') {
+                    tasaCambio = await obtenerTasaCambio(datosConvertidos.moneda);
+                    precioEUR = datosConvertidos.precio * tasaCambio;
+                    console.log('Conversion a EUR:', datosConvertidos.precio, datosConvertidos.moneda, '=', precioEUR, 'EUR');
+                    console.log('Tasa de cambio usada:', tasaCambio);
                 }
 
-                // 4. Calcular valor actual
+                // 5. Calcular valor actual
                 const valorActualCalculado = numAcciones * precioEUR;
                 
                 console.log('Calculo final:');
@@ -4145,33 +4205,47 @@
                 console.log('  Precio EUR:', precioEUR);
                 console.log('  Valor total:', valorActualCalculado);
 
-                // 5. Guardar todo en la inversion
+                // 6. Guardar en la inversión
                 inv.numAcciones = numAcciones;
                 inv.precioActual = precioEUR;
-                inv.precioActualOriginal = datosPrecio.precio;
-                inv.divisaOriginal = datosPrecio.moneda;
+                inv.precioActualOriginal = datosConvertidos.precio;
+                inv.divisaOriginal = datosConvertidos.moneda;
                 inv.tasaCambio = tasaCambio;
                 inv.valorActual = valorActualCalculado;
                 inv.ultimaActualizacion = new Date().toISOString();
+                
+                // Guardar info de céntimos si aplica
+                if (datosConvertidos.esCentimos) {
+                    inv.precioEnCentimos = datosConvertidos.precioOriginalCentimos;
+                    inv.monedaCentimos = datosPrecio.moneda; // GBp, GBX, etc.
+                }
 
-                // 6. Guardar y actualizar UI
+                // 7. Guardar y actualizar UI
                 guardarDatos();
                 renderInversiones();
                 actualizarOverview();
 
                 console.log('=== PRECIO ACTUALIZADO CORRECTAMENTE ===');
                 
-                mostrarNotificacion(
-                    inv.nombre + ': ' + datosPrecio.precio.toFixed(2) + ' ' + datosPrecio.moneda + 
-                    ' = ' + precioEUR.toFixed(2) + ' EUR',
-                    'success'
-                );
+                // Mensaje al usuario
+                let mensaje = inv.nombre + ': ';
+                if (datosConvertidos.esCentimos) {
+                    mensaje += datosConvertidos.precioOriginalCentimos.toFixed(2) + ' ' + datosPrecio.moneda;
+                    mensaje += ' (' + datosConvertidos.precio.toFixed(2) + ' ' + datosConvertidos.moneda + ')';
+                } else {
+                    mensaje += datosConvertidos.precio.toFixed(2) + ' ' + datosConvertidos.moneda;
+                }
+                mensaje += ' = ' + precioEUR.toFixed(2) + ' EUR';
+                
+                mostrarNotificacion(mensaje, 'success');
 
             } catch (error) {
                 console.error('Error en actualizacion de precio:', error);
                 mostrarNotificacion('Error: ' + error.message, 'danger');
             }
         }
+
+
 
 
         // SISTEMA DE DIAGNOSTICO MEJORADO - V4.1
@@ -4346,7 +4420,7 @@
 
         // Agregar boton de diagnostico al HTML
         window.addEventListener('load', function() {
-            console.log('Investment Tracker v4.1 cargado');
+            console.log('Investment Tracker v4.2 cargado');
             console.log('Ejecuta diagnosticarConexion() en la consola para probar la conexion');
         });
 
