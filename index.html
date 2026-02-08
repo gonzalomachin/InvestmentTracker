@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Investment Tracker Pro v4.2 - Firefox Fix + Céntimos</title>
+    <title>Investment Tracker Pro v4.3 - Firefox Compatible + Céntimos</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.sheetjs.com/xlsx-0.20.0/package/dist/xlsx.full.min.js"></script>
     <style>
@@ -800,7 +800,7 @@
                     <circle cx="24" cy="12" r="2" fill="#00c9a7"/>
                 </svg>
                 <div>
-                    <h1>Investment Tracker Pro <span class="version-badge">v4.2</span></h1>
+                    <h1>Investment Tracker Pro <span class="version-badge">v4.3</span></h1>
                 </div>
             </div>
             <div class="header-actions">
@@ -4326,101 +4326,149 @@
 
         // Funcion mejorada con mas detalles de error
         // VERSION 4.1 - Yahoo Finance con CORS Proxy
+        // VERSION 4.3 - Proxies optimizados para Firefox
         async function obtenerPrecioYahoo(ticker) {
             console.log('obtenerPrecioYahoo: consultando', ticker);
             
-            // SOLUCION CORS: Usar proxy gratuito
-            // Alternativas de proxy CORS (si uno falla, probar otro):
-            const proxies = [
-                'https://api.allorigins.win/raw?url=',
-                'https://corsproxy.io/?',
-                'https://api.codetabs.com/v1/proxy?quest='
-            ];
-            
             const yahooUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${ticker}`;
+            
+            // Proxies CORS optimizados para Firefox (en orden de prioridad)
+            const proxies = [
+                // Proxy 1: ThingProxy (muy compatible con Firefox)
+                {
+                    url: 'https://thingproxy.freeboard.io/fetch/',
+                    format: (url) => 'https://thingproxy.freeboard.io/fetch/' + url
+                },
+                // Proxy 2: AllOrigins con parámetros específicos
+                {
+                    url: 'https://api.allorigins.win/get?url=',
+                    format: (url) => 'https://api.allorigins.win/get?url=' + encodeURIComponent(url),
+                    parseResponse: async (response) => {
+                        const data = await response.json();
+                        return JSON.parse(data.contents);
+                    }
+                },
+                // Proxy 3: CORS Anywhere (público)
+                {
+                    url: 'https://cors-anywhere.herokuapp.com/',
+                    format: (url) => 'https://cors-anywhere.herokuapp.com/' + url
+                },
+                // Proxy 4: Codetabs
+                {
+                    url: 'https://api.codetabs.com/v1/proxy?quest=',
+                    format: (url) => 'https://api.codetabs.com/v1/proxy?quest=' + encodeURIComponent(url)
+                }
+            ];
             
             // Intentar con cada proxy
             for (let i = 0; i < proxies.length; i++) {
                 const proxy = proxies[i];
-                const url = proxy + encodeURIComponent(yahooUrl);
+                const proxyUrl = proxy.format(yahooUrl);
                 
-                console.log(`Intento ${i + 1}: Usando proxy ${proxy}`);
+                console.log(`Intento ${i + 1}: ${proxy.url}`);
+                console.log('URL completa:', proxyUrl);
                 
                 try {
-                    const response = await fetch(url, {
+                    const response = await fetch(proxyUrl, {
                         method: 'GET',
                         headers: {
-                            'Accept': 'application/json'
-                        }
+                            'Accept': 'application/json',
+                            'Content-Type': 'application/json'
+                        },
+                        mode: 'cors'
                     });
                     
-                    console.log('HTTP Status:', response.status, response.statusText);
+                    console.log(`Proxy ${i + 1} - HTTP Status:`, response.status, response.statusText);
                     
                     if (!response.ok) {
                         console.warn(`Proxy ${i + 1} fallo con status ${response.status}`);
-                        continue; // Probar siguiente proxy
+                        continue;
                     }
                     
-                    const text = await response.text();
-                    
+                    // Parsear respuesta (algunos proxies envuelven el JSON)
                     let data;
-                    try {
-                        data = JSON.parse(text);
-                    } catch (e) {
-                        console.error('Error parseando JSON:', e);
-                        continue; // Probar siguiente proxy
+                    if (proxy.parseResponse) {
+                        data = await proxy.parseResponse(response);
+                    } else {
+                        const text = await response.text();
+                        try {
+                            data = JSON.parse(text);
+                        } catch (e) {
+                            console.warn(`Proxy ${i + 1} - Error parseando JSON:`, e.message);
+                            continue;
+                        }
                     }
                     
+                    // Validar estructura de Yahoo Finance
                     if (!data.chart || !data.chart.result || !data.chart.result[0]) {
-                        console.warn('Estructura de datos invalida');
-                        continue; // Probar siguiente proxy
+                        console.warn(`Proxy ${i + 1} - Estructura de datos invalida`);
+                        continue;
                     }
                     
                     const result = data.chart.result[0];
                     const precio = result.meta.regularMarketPrice;
                     const moneda = result.meta.currency || 'USD';
                     
-                    if (!precio) {
-                        console.warn('No se encontro precio');
-                        continue; // Probar siguiente proxy
+                    if (!precio || precio <= 0) {
+                        console.warn(`Proxy ${i + 1} - Precio invalido:`, precio);
+                        continue;
                     }
                     
-                    console.log('EXITO con proxy', i + 1, '- Precio:', precio, moneda);
+                    console.log(`EXITO con proxy ${i + 1} - Precio: ${precio} ${moneda}`);
                     return { precio, moneda };
                     
                 } catch (error) {
                     console.warn(`Proxy ${i + 1} error:`, error.message);
-                    continue; // Probar siguiente proxy
+                    if (i < proxies.length - 1) {
+                        console.log('Probando siguiente proxy...');
+                    }
+                    continue;
                 }
             }
             
-            // Si todos los proxies fallaron, intentar directo (por si acaso funciona)
-            console.log('Todos los proxies fallaron, intentando conexion directa...');
+            // Si todos los proxies fallaron, intentar conexión directa
+            console.log('Todos los proxies fallaron. Intentando conexion directa a Yahoo Finance...');
             try {
-                const response = await fetch(yahooUrl);
+                const response = await fetch(yahooUrl, {
+                    method: 'GET',
+                    mode: 'cors',
+                    headers: {
+                        'Accept': 'application/json'
+                    }
+                });
+                
                 if (response.ok) {
                     const data = await response.json();
                     if (data.chart && data.chart.result && data.chart.result[0]) {
                         const result = data.chart.result[0];
-                        return {
-                            precio: result.meta.regularMarketPrice,
-                            moneda: result.meta.currency || 'USD'
-                        };
+                        const precio = result.meta.regularMarketPrice;
+                        const moneda = result.meta.currency || 'USD';
+                        console.log('Conexion directa exitosa - Precio:', precio, moneda);
+                        return { precio, moneda };
                     }
                 }
             } catch (e) {
                 console.error('Conexion directa tambien fallo:', e.message);
             }
             
+            // Error final
             console.error('ERROR: No se pudo obtener precio de ninguna fuente');
+            console.error('Posibles causas:');
+            console.error('1. Todos los proxies estan caidos o bloqueados');
+            console.error('2. Firewall corporativo bloqueando todas las conexiones');
+            console.error('3. Ticker invalido:', ticker);
+            console.error('4. Yahoo Finance bloqueando tu IP/red');
+            
             return null;
         }
 
 
 
+
+
         // Agregar boton de diagnostico al HTML
         window.addEventListener('load', function() {
-            console.log('Investment Tracker v4.2 cargado');
+            console.log('Investment Tracker v4.3 cargado');
             console.log('Ejecuta diagnosticarConexion() en la consola para probar la conexion');
         });
 
