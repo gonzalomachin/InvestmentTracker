@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Investment Tracker Pro v4.4 - Filtros + Inversiones Pasadas</title>
+    <title>Investment Tracker Pro v4.5 - Filtros Multi + Benchmarks Filtrados</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.sheetjs.com/xlsx-0.20.0/package/dist/xlsx.full.min.js"></script>
     <style>
@@ -800,7 +800,7 @@
                     <circle cx="24" cy="12" r="2" fill="#00c9a7"/>
                 </svg>
                 <div>
-                    <h1>Investment Tracker Pro <span class="version-badge">v4.4</span></h1>
+                    <h1>Investment Tracker Pro <span class="version-badge">v4.5</span></h1>
                 </div>
             </div>
             <div class="header-actions">
@@ -1182,7 +1182,7 @@
         
         let inversiones = [];
         let inversionesCerradas = [];
-        let filtroActual = { tipoActivo: 'todos', inversionId: 'todas' };
+        let filtroActual = { tiposActivo: [], inversionesIds: [] };
         let charts = {};
         let currentTab = 'overview';
         let movimientosTemp = []; // Para importación temporal
@@ -4484,7 +4484,7 @@
 
         // Agregar boton de diagnostico al HTML
         window.addEventListener('load', function() {
-            console.log('Investment Tracker v4.4 cargado');
+            console.log('Investment Tracker v4.5 cargado');
             console.log('Ejecuta diagnosticarConexion() en la consola para probar la conexion');
         });
 
@@ -4753,13 +4753,70 @@
         }
 
         // Renderizar pestaña de Holdings & Métricas
-        async function renderHoldingsYMetricas() {
+                // ============================================
+        // HOLDINGS COMPLETO - V4.5
+        // ============================================
+        
+        function renderHoldingsYMetricas() {
+            console.log('=== RENDERIZANDO HOLDINGS ===');
             const container = document.getElementById('holdingsContent');
-            if (!container) return;
+            console.log('Container encontrado:', container);
+            if (!container) {
+                console.error('ERROR: No se encontró el contenedor holdingsContent');
+                return;
+            }
             
             let html = '<div style="display: grid; gap: 30px;">';
             
-            // Sección 1: Métricas de Acciones
+            // Sección 1: Resumen de Holdings
+            const totalInversiones = inversiones.length;
+            const conTicker = inversiones.filter(inv => inv.ticker).length;
+            const conISIN = inversiones.filter(inv => inv.isin).length;
+            
+            html += `
+                <div style="background: var(--bg-secondary); 
+                           padding: 25px; 
+                           border-radius: 12px; 
+                           border: 1px solid var(--border);">
+                    <h2 style="margin-bottom: 20px;">📊 Holdings y Métricas</h2>
+                    
+                    <div style="display: grid; 
+                               grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); 
+                               gap: 15px;
+                               margin-bottom: 20px;">
+                        <div class="card">
+                            <div class="card-title">Total Inversiones</div>
+                            <div class="card-value">${totalInversiones}</div>
+                            <div class="card-subtitle">En tu portfolio</div>
+                        </div>
+                        <div class="card">
+                            <div class="card-title">Con Ticker</div>
+                            <div class="card-value">${conTicker}</div>
+                            <div class="card-subtitle">Acciones rastreables</div>
+                        </div>
+                        <div class="card">
+                            <div class="card-title">Con ISIN</div>
+                            <div class="card-value">${conISIN}</div>
+                            <div class="card-subtitle">Fondos identificables</div>
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            // Sección 2: Tabla de Holdings
+            html += `
+                <div class="chart-container">
+                    <div class="chart-header">
+                        <h3 class="chart-title">💼 Detalle de Holdings</h3>
+                        <button onclick="exportarHoldings()" class="btn btn-secondary" style="font-size: 0.85em;">
+                            📤 Exportar CSV
+                        </button>
+                    </div>
+                    <div id="tabla-holdings"></div>
+                </div>
+            `;
+            
+            // Sección 3: Métricas de Acciones (si hay tickers)
             const accionesConTicker = inversiones.filter(inv => 
                 inv.ticker && (inv.tipoActivo === 'acciones' || !inv.tipoActivo)
             );
@@ -4768,336 +4825,375 @@
                 html += `
                     <div class="chart-container">
                         <div class="chart-header">
-                            <h3 class="chart-title"> Métricas de Acciones</h3>
+                            <h3 class="chart-title">📈 Métricas de Acciones</h3>
                             <button class="btn btn-primary" onclick="cargarMetricasAcciones()" style="font-size: 0.85em;">
-                                 Actualizar Métricas
+                                🔄 Actualizar Métricas
                             </button>
                         </div>
-                        <div id="metricas-acciones-container"></div>
-                    </div>
-                `;
-            }
-            
-            // Sección 2: Holdings de Fondos
-            const fondos = inversiones.filter(inv => inv.isin && inv.tipoActivo === 'mixto');
-            
-            if (fondos.length > 0) {
-                html += `
-                    <div class="chart-container">
-                        <div class="chart-header">
-                            <h3 class="chart-title"> Holdings de Fondos</h3>
-                        </div>
-                        <div class="alert alert-info">
-                            <div class="alert-title">ℹ️ Holdings de Fondos</div>
-                            <div class="alert-text">
-                                Para obtener los holdings reales de fondos se requiere una API premium (Morningstar, Bloomberg).
-                                <br><br>
-                                <strong>Opciones:</strong><br>
-                                1. Añadir manualmente los holdings principales<br>
-                                2. Subscribirse a Morningstar API (~$100/mes)<br>
-                                3. Usar scraping (complejo y frágil)
-                            </div>
+                        <div id="metricas-acciones-container">
+                            <p style="text-align: center; padding: 40px; color: var(--text-muted);">
+                                Click en "Actualizar Métricas" para cargar datos de Yahoo Finance
+                            </p>
                         </div>
                     </div>
                 `;
             }
             
-            // Sección 3: Fondos Similares por Categoría
-            const inversionesConCategoria = inversiones.filter(inv => inv.categoria);
-            
-            if (inversionesConCategoria.length > 0) {
-                html += `
-                    <div class="chart-container">
-                        <div class="chart-header">
-                            <h3 class="chart-title"> Fondos Similares por Categoría</h3>
-                        </div>
-                        <div id="fondos-similares-container"></div>
+            // Sección 4: Distribución por Tipo
+            html += `
+                <div class="chart-container">
+                    <div class="chart-header">
+                        <h3 class="chart-title">📊 Distribución por Tipo de Activo</h3>
                     </div>
-                `;
-            }
+                    <div id="distribucion-tipos"></div>
+                </div>
+            `;
             
             html += '</div>';
+            console.log('HTML generado, longitud:', html.length);
             container.innerHTML = html;
+            console.log('HTML insertado en container');
             
-            // Cargar métricas y fondos similares
-            if (accionesConTicker.length > 0) {
-                await renderMetricasAcciones();
-            }
+            // Renderizar tabla de holdings
+            console.log('Llamando a renderTablaHoldings...');
+            renderTablaHoldings();
+            console.log('renderTablaHoldings completado');
             
-            if (inversionesConCategoria.length > 0) {
-                renderFondosSimilares();
-            }
+            // Renderizar distribución por tipos
+            renderDistribucionTipos();
         }
-
-        async function cargarMetricasAcciones() {
-            const container = document.getElementById('metricas-acciones-container');
-            if (!container) return;
-            
-            container.innerHTML = '<p style="text-align: center; padding: 20px;">⟳ Cargando métricas...</p>';
-            
-            const accionesConTicker = inversiones.filter(inv => inv.ticker);
-            const metricas = [];
-            
-            for (const inv of accionesConTicker) {
-                const datos = await obtenerMetricasAccion(inv.ticker);
-                if (datos) {
-                    metricas.push({
-                        nombre: inv.nombre,
-                        ticker: inv.ticker,
-                        ...datos
-                    });
-                }
-                await new Promise(resolve => setTimeout(resolve, 500));
+        
+        function renderTablaHoldings() {
+            console.log('=== RENDERIZANDO TABLA HOLDINGS ===');
+            const container = document.getElementById('tabla-holdings');
+            console.log('Container tabla-holdings:', container);
+            if (!container) {
+                console.error('ERROR: No se encontró tabla-holdings');
+                return;
             }
             
-            // Guardar métricas en las inversiones
-            metricas.forEach(m => {
-                const inv = inversiones.find(i => i.ticker === m.ticker);
-                if (inv) {
-                    inv.metricas = m;
-                }
-            });
-            
-            guardarDatos();
-            renderMetricasAcciones();
-        }
-
-        function renderMetricasAcciones() {
-            const container = document.getElementById('metricas-acciones-container');
-            if (!container) return;
-            
-            const accionesConMetricas = inversiones.filter(inv => inv.metricas);
-            
-            if (accionesConMetricas.length === 0) {
+            if (inversiones.length === 0) {
                 container.innerHTML = `
-                    <p style="text-align: center; padding: 20px; color: var(--text-secondary);">
-                        No hay métricas cargadas. Presiona "Actualizar Métricas" para cargarlas.
+                    <p style="text-align: center; padding: 40px; color: var(--text-muted);">
+                        No hay inversiones en tu portfolio
                     </p>
                 `;
                 return;
             }
             
-            const html = accionesConMetricas.map(inv => {
-                const m = inv.metricas;
-                return `
-                    <div style="border: 1px solid var(--border); border-radius: 10px; padding: 20px; margin-bottom: 15px;">
-                        <h4 style="margin-bottom: 15px; font-size: 1.2em;">${inv.nombre} (${inv.ticker})</h4>
-                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 15px;">
-                            ${m.pe ? `
-                                <div>
-                                    <div style="font-size: 0.85em; color: var(--text-secondary);">P/E Ratio</div>
-                                    <div style="font-size: 1.3em; font-weight: bold;">${m.pe.toFixed(2)}</div>
-                                </div>
-                            ` : ''}
-                            ${m.dividendYield ? `
-                                <div>
-                                    <div style="font-size: 0.85em; color: var(--text-secondary);">Dividend Yield</div>
-                                    <div style="font-size: 1.3em; font-weight: bold; color: #00c9a7;">${m.dividendYield.toFixed(2)}%</div>
-                                </div>
-                            ` : ''}
-                            ${m.beta ? `
-                                <div>
-                                    <div style="font-size: 0.85em; color: var(--text-secondary);">Beta</div>
-                                    <div style="font-size: 1.3em; font-weight: bold;">${m.beta.toFixed(2)}</div>
-                                </div>
-                            ` : ''}
-                            ${m.marketCap ? `
-                                <div>
-                                    <div style="font-size: 0.85em; color: var(--text-secondary);">Market Cap</div>
-                                    <div style="font-size: 1.3em; font-weight: bold;">$${(m.marketCap / 1e9).toFixed(1)}B</div>
-                                </div>
-                            ` : ''}
-                            ${m.eps ? `
-                                <div>
-                                    <div style="font-size: 0.85em; color: var(--text-secondary);">EPS</div>
-                                    <div style="font-size: 1.3em; font-weight: bold;">$${m.eps.toFixed(2)}</div>
-                                </div>
-                            ` : ''}
-                        </div>
-                        ${m.sector ? `<p style="margin-top: 10px; font-size: 0.9em; color: var(--text-secondary);"><strong>Sector:</strong> ${m.sector}</p>` : ''}
-                    </div>
-                `;
-            }).join('');
+            // Ordenar por valor actual (mayor a menor)
+            const inversionesOrdenadas = [...inversiones].sort((a, b) => 
+                getValorActual(b) - getValorActual(a)
+            );
             
-            container.innerHTML = html;
-        }
-
-        function renderFondosSimilares() {
-            const container = document.getElementById('fondos-similares-container');
-            if (!container) return;
-            
-            const categorias = [...new Set(inversiones.filter(inv => inv.categoria).map(inv => inv.categoria))];
-            
-            let html = '';
-            
-            categorias.forEach(cat => {
-                const similares = buscarFondosSimilaresPorCategoria(cat);
-                
-                if (similares.length > 0) {
-                    html += `
-                        <div style="margin-bottom: 25px;">
-                            <h4 style="margin-bottom: 15px; text-transform: capitalize;">${cat}</h4>
-                            <div style="display: grid; gap: 10px;">
-                                ${similares.map(fondo => `
-                                    <div style="border: 1px solid var(--border); border-radius: 8px; padding: 15px; display: flex; justify-content: space-between; align-items: center;">
-                                        <div>
-                                            <div style="font-weight: 600;">${fondo.nombre}</div>
-                                            <div style="font-size: 0.85em; color: var(--text-secondary); margin-top: 5px;">
-                                                ${fondo.ticker} * ${fondo.isin}
-                                            </div>
-                                        </div>
-                                        <button class="btn btn-secondary" onclick="copiarISIN('${fondo.isin}')" style="font-size: 0.85em;">
-                                             Copiar ISIN
-                                        </button>
-                                    </div>
-                                `).join('')}
-                            </div>
-                        </div>
-                    `;
-                }
-            });
-            
-            container.innerHTML = html;
-        }
-
-        function copiarISIN(isin) {
-            navigator.clipboard.writeText(isin).then(() => {
-                mostrarNotificacion(' ISIN copiado: ' + isin, 'success');
-            }).catch(() => {
-                mostrarNotificacion('Error al copiar', 'danger');
-            });
-        }
-
-        // ============================================
-        // INICIALIZACIÓN
-        // ============================================
-
-
-        // ============================================
-        // FILTROS DE INVERSIONES - V4.4
-        // ============================================
-        
-        function renderFiltros(containerId) {
-            const container = document.getElementById(containerId);
-            if (!container) return;
-            
-            // Obtener tipos únicos
-            const tiposUnicos = [...new Set(inversiones.map(inv => inv.tipoActivo))];
+            const valorTotal = inversiones.reduce((sum, inv) => sum + getValorActual(inv), 0);
             
             const html = `
-                <div style="display: flex; gap: 15px; margin-bottom: 25px; flex-wrap: wrap; align-items: center;">
-                    <div style="display: flex; flex-direction: column; gap: 5px;">
-                        <label style="font-size: 0.85em; color: var(--text-secondary); font-weight: 500;">
-                            Tipo de Activo
-                        </label>
-                        <select id="filtro-tipo-${containerId}" 
-                                onchange="aplicarFiltro('${containerId}')"
-                                style="background: var(--bg-input); 
-                                       color: var(--text-primary); 
-                                       border: 1px solid var(--border); 
-                                       border-radius: 8px; 
-                                       padding: 10px 15px;
-                                       font-size: 0.95em;
-                                       min-width: 200px;
-                                       cursor: pointer;">
-                            <option value="todos">Todos los tipos</option>
-                            ${tiposUnicos.map(tipo => `
-                                <option value="${tipo}" ${filtroActual.tipoActivo === tipo ? 'selected' : ''}>
-                                    ${tipo.charAt(0).toUpperCase() + tipo.slice(1)}
-                                </option>
-                            `).join('')}
-                        </select>
-                    </div>
-                    
-                    <div style="display: flex; flex-direction: column; gap: 5px;">
-                        <label style="font-size: 0.85em; color: var(--text-secondary); font-weight: 500;">
-                            Inversión Específica
-                        </label>
-                        <select id="filtro-inversion-${containerId}" 
-                                onchange="aplicarFiltro('${containerId}')"
-                                style="background: var(--bg-input); 
-                                       color: var(--text-primary); 
-                                       border: 1px solid var(--border); 
-                                       border-radius: 8px; 
-                                       padding: 10px 15px;
-                                       font-size: 0.95em;
-                                       min-width: 250px;
-                                       cursor: pointer;">
-                            <option value="todas">Todas las inversiones</option>
-                            ${inversiones
-                                .filter(inv => filtroActual.tipoActivo === 'todos' || inv.tipoActivo === filtroActual.tipoActivo)
-                                .map(inv => `
-                                    <option value="${inv.id}" ${filtroActual.inversionId === inv.id ? 'selected' : ''}>
-                                        ${inv.nombre}
-                                    </option>
-                                `).join('')}
-                        </select>
-                    </div>
-                    
-                    ${(filtroActual.tipoActivo !== 'todos' || filtroActual.inversionId !== 'todas') ? `
-                        <button onclick="limpiarFiltros('${containerId}')" 
-                                class="btn btn-secondary"
-                                style="margin-top: 20px; padding: 10px 20px;">
-                            Limpiar filtros
-                        </button>
-                    ` : ''}
+                <div style="overflow-x: auto;">
+                    <table style="width: 100%; border-collapse: collapse;">
+                        <thead>
+                            <tr style="border-bottom: 2px solid var(--border); background: var(--bg-secondary);">
+                                <th style="padding: 12px; text-align: left; color: var(--text-secondary);">Inversión</th>
+                                <th style="padding: 12px; text-align: left; color: var(--text-secondary);">Tipo</th>
+                                <th style="padding: 12px; text-align: right; color: var(--text-secondary);">Cantidad</th>
+                                <th style="padding: 12px; text-align: right; color: var(--text-secondary);">Valor Actual</th>
+                                <th style="padding: 12px; text-align: right; color: var(--text-secondary);">% Portfolio</th>
+                                <th style="padding: 12px; text-align: center; color: var(--text-secondary);">Ticker/ISIN</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${inversionesOrdenadas.map(inv => {
+                                const valor = getValorActual(inv);
+                                const porcentaje = valorTotal > 0 ? (valor / valorTotal) * 100 : 0;
+                                const numAcciones = inv.numAcciones || calcularNumAccionesTotales(inv);
+                                
+                                return `
+                                    <tr style="border-bottom: 1px solid var(--border);">
+                                        <td style="padding: 12px;">
+                                            <strong>${inv.nombre}</strong>
+                                        </td>
+                                        <td style="padding: 12px;">
+                                            <span style="background: var(--bg-primary); 
+                                                        padding: 4px 10px; 
+                                                        border-radius: 6px; 
+                                                        font-size: 0.85em;">
+                                                ${inv.tipoActivo || 'N/A'}
+                                            </span>
+                                        </td>
+                                        <td style="padding: 12px; text-align: right;">
+                                            ${numAcciones ? formatNumber(numAcciones) : '-'}
+                                            ${numAcciones && inv.ticker ? ' acciones' : ''}
+                                        </td>
+                                        <td style="padding: 12px; text-align: right;">
+                                            <strong>€${formatNumber(valor)}</strong>
+                                        </td>
+                                        <td style="padding: 12px; text-align: right;">
+                                            <div style="display: flex; 
+                                                       align-items: center; 
+                                                       justify-content: flex-end; 
+                                                       gap: 10px;">
+                                                <span style="font-weight: 600;">${porcentaje.toFixed(1)}%</span>
+                                                <div style="width: 80px; 
+                                                           height: 8px; 
+                                                           background: var(--bg-primary); 
+                                                           border-radius: 4px; 
+                                                           overflow: hidden;">
+                                                    <div style="width: ${porcentaje}%; 
+                                                               height: 100%; 
+                                                               background: var(--primary);"></div>
+                                                </div>
+                                            </div>
+                                        </td>
+                                        <td style="padding: 12px; text-align: center; font-size: 0.85em; color: var(--text-muted);">
+                                            ${inv.ticker || inv.isin || '-'}
+                                        </td>
+                                    </tr>
+                                `;
+                            }).join('')}
+                        </tbody>
+                        <tfoot>
+                            <tr style="border-top: 2px solid var(--border); background: var(--bg-secondary);">
+                                <td colspan="3" style="padding: 12px;"><strong>TOTAL</strong></td>
+                                <td style="padding: 12px; text-align: right;">
+                                    <strong style="font-size: 1.1em;">€${formatNumber(valorTotal)}</strong>
+                                </td>
+                                <td style="padding: 12px; text-align: right;">
+                                    <strong>100%</strong>
+                                </td>
+                                <td></td>
+                            </tr>
+                        </tfoot>
+                    </table>
                 </div>
             `;
             
             container.innerHTML = html;
         }
         
-        function aplicarFiltro(containerId) {
-            const selectTipo = document.getElementById(`filtro-tipo-${containerId}`);
-            const selectInversion = document.getElementById(`filtro-inversion-${containerId}`);
-            
-            if (selectTipo) {
-                filtroActual.tipoActivo = selectTipo.value;
+        function renderDistribucionTipos() {
+            console.log('=== RENDERIZANDO DISTRIBUCIÓN TIPOS ===');
+            const container = document.getElementById('distribucion-tipos');
+            console.log('Container distribucion-tipos:', container);
+            if (!container) {
+                console.error('ERROR: No se encontró distribucion-tipos');
+                return;
             }
             
-            if (selectInversion) {
-                filtroActual.inversionId = selectInversion.value;
-            }
+            // Agrupar por tipo
+            const porTipo = {};
+            inversiones.forEach(inv => {
+                const tipo = inv.tipoActivo || 'Otros';
+                if (!porTipo[tipo]) {
+                    porTipo[tipo] = { valor: 0, count: 0 };
+                }
+                porTipo[tipo].valor += getValorActual(inv);
+                porTipo[tipo].count += 1;
+            });
             
-            // Re-renderizar filtros para actualizar opciones
-            renderFiltros(containerId);
+            const valorTotal = Object.values(porTipo).reduce((sum, t) => sum + t.valor, 0);
             
-            // Actualizar la vista correspondiente
-            if (containerId.includes('overview')) {
-                actualizarOverviewConFiltro();
-            } else if (containerId.includes('benchmark')) {
-                renderBenchmarksConFiltro();
-            }
-        }
-        
-        function limpiarFiltros(containerId) {
-            filtroActual = {
-                tipoActivo: 'todos',
-                inversionId: 'todas'
+            // Ordenar por valor
+            const tiposOrdenados = Object.entries(porTipo)
+                .sort((a, b) => b[1].valor - a[1].valor);
+            
+            const colores = {
+                'acciones': '#00c9a7',
+                'bonos': '#4169e1',
+                'fondos': '#9370db',
+                'crypto': '#ff6b6b',
+                'inmobiliario': '#ffa500',
+                'mixto': '#20b2aa'
             };
-            renderFiltros(containerId);
             
-            if (containerId.includes('overview')) {
-                actualizarOverview();
-            } else if (containerId.includes('benchmark')) {
-                renderBenchmarks();
-            }
+            const html = `
+                <div style="display: grid; gap: 15px;">
+                    ${tiposOrdenados.map(([tipo, data]) => {
+                        const porcentaje = valorTotal > 0 ? (data.valor / valorTotal) * 100 : 0;
+                        const color = colores[tipo.toLowerCase()] || '#888';
+                        
+                        return `
+                            <div style="display: flex; 
+                                       align-items: center; 
+                                       gap: 15px; 
+                                       padding: 15px; 
+                                       background: var(--bg-secondary); 
+                                       border-radius: 8px;
+                                       border-left: 4px solid ${color};">
+                                <div style="flex: 1;">
+                                    <div style="font-weight: 600; margin-bottom: 5px;">
+                                        ${tipo.charAt(0).toUpperCase() + tipo.slice(1)}
+                                    </div>
+                                    <div style="font-size: 0.85em; color: var(--text-muted);">
+                                        ${data.count} inversión${data.count > 1 ? 'es' : ''}
+                                    </div>
+                                </div>
+                                <div style="flex: 2;">
+                                    <div style="display: flex; 
+                                               align-items: center; 
+                                               gap: 10px; 
+                                               margin-bottom: 5px;">
+                                        <div style="flex: 1; 
+                                                   height: 24px; 
+                                                   background: var(--bg-primary); 
+                                                   border-radius: 12px; 
+                                                   overflow: hidden;">
+                                            <div style="width: ${porcentaje}%; 
+                                                       height: 100%; 
+                                                       background: ${color}; 
+                                                       transition: width 0.3s;"></div>
+                                        </div>
+                                        <span style="font-weight: 600; min-width: 60px; text-align: right;">
+                                            ${porcentaje.toFixed(1)}%
+                                        </span>
+                                    </div>
+                                    <div style="text-align: right; font-size: 0.9em;">
+                                        €${formatNumber(data.valor)}
+                                    </div>
+                                </div>
+                            </div>
+                        `;
+                    }).join('')}
+                </div>
+            `;
+            
+            container.innerHTML = html;
         }
         
-        function obtenerInversionesFiltradas() {
-            let filtradas = [...inversiones];
+        async function cargarMetricasAcciones() {
+            const container = document.getElementById('metricas-acciones-container');
+            if (!container) return;
             
-            if (filtroActual.tipoActivo !== 'todos') {
-                filtradas = filtradas.filter(inv => inv.tipoActivo === filtroActual.tipoActivo);
+            container.innerHTML = '<p style="text-align: center; padding: 20px;">⟳ Cargando métricas desde Yahoo Finance...</p>';
+            
+            const accionesConTicker = inversiones.filter(inv => inv.ticker);
+            
+            if (accionesConTicker.length === 0) {
+                container.innerHTML = '<p style="text-align: center; padding: 20px; color: var(--text-muted);">No hay acciones con ticker configurado</p>';
+                return;
             }
             
-            if (filtroActual.inversionId !== 'todas') {
-                filtradas = filtradas.filter(inv => inv.id === parseInt(filtroActual.inversionId));
+            const metricas = [];
+            
+            for (const inv of accionesConTicker) {
+                try {
+                    const datos = await obtenerPrecioYahoo(inv.ticker);
+                    if (datos) {
+                        metricas.push({
+                            nombre: inv.nombre,
+                            ticker: inv.ticker,
+                            precio: datos.precio,
+                            moneda: datos.moneda,
+                            numAcciones: inv.numAcciones || calcularNumAccionesTotales(inv),
+                            valorTotal: getValorActual(inv)
+                        });
+                    }
+                } catch (error) {
+                    console.error(`Error obteniendo métricas de ${inv.ticker}:`, error);
+                }
+                
+                // Esperar un poco entre peticiones
+                await new Promise(resolve => setTimeout(resolve, 500));
             }
             
-            return filtradas;
+            renderMetricasAcciones(metricas);
         }
         
+        function renderMetricasAcciones(metricas) {
+            const container = document.getElementById('metricas-acciones-container');
+            if (!container) return;
+            
+            if (metricas.length === 0) {
+                container.innerHTML = `
+                    <p style="text-align: center; padding: 40px; color: var(--text-muted);">
+                        No se pudieron cargar métricas. Verifica los tickers.
+                    </p>
+                `;
+                return;
+            }
+            
+            const html = `
+                <div style="overflow-x: auto;">
+                    <table style="width: 100%; border-collapse: collapse;">
+                        <thead>
+                            <tr style="border-bottom: 2px solid var(--border);">
+                                <th style="padding: 12px; text-align: left;">Acción</th>
+                                <th style="padding: 12px; text-align: left;">Ticker</th>
+                                <th style="padding: 12px; text-align: right;">Precio Actual</th>
+                                <th style="padding: 12px; text-align: right;">Acciones</th>
+                                <th style="padding: 12px; text-align: right;">Valor Total</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${metricas.map(m => `
+                                <tr style="border-bottom: 1px solid var(--border);">
+                                    <td style="padding: 12px;"><strong>${m.nombre}</strong></td>
+                                    <td style="padding: 12px;">${m.ticker}</td>
+                                    <td style="padding: 12px; text-align: right;">
+                                        ${m.precio.toFixed(2)} ${m.moneda}
+                                    </td>
+                                    <td style="padding: 12px; text-align: right;">
+                                        ${m.numAcciones ? formatNumber(m.numAcciones) : '-'}
+                                    </td>
+                                    <td style="padding: 12px; text-align: right;">
+                                        <strong>€${formatNumber(m.valorTotal)}</strong>
+                                    </td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                </div>
+                <p style="font-size: 0.85em; 
+                         color: var(--text-muted); 
+                         margin-top: 15px; 
+                         text-align: center;">
+                    Última actualización: ${new Date().toLocaleString('es-ES')}
+                </p>
+            `;
+            
+            container.innerHTML = html;
+        }
+        
+        function exportarHoldings() {
+            if (inversiones.length === 0) {
+                mostrarNotificacion('No hay holdings para exportar', 'danger');
+                return;
+            }
+            
+            const headers = ['Nombre', 'Tipo', 'Ticker/ISIN', 'Cantidad', 'Valor Actual', '% Portfolio'];
+            
+            const valorTotal = inversiones.reduce((sum, inv) => sum + getValorActual(inv), 0);
+            
+            const rows = inversiones.map(inv => {
+                const valor = getValorActual(inv);
+                const porcentaje = valorTotal > 0 ? (valor / valorTotal) * 100 : 0;
+                const numAcciones = inv.numAcciones || calcularNumAccionesTotales(inv);
+                
+                return [
+                    inv.nombre,
+                    inv.tipoActivo || 'N/A',
+                    inv.ticker || inv.isin || 'N/A',
+                    numAcciones || '',
+                    valor.toFixed(2),
+                    porcentaje.toFixed(2)
+                ];
+            });
+            
+            let csv = headers.join(',') + '\n';
+            rows.forEach(row => {
+                csv += row.join(',') + '\n';
+            });
+            
+            const blob = new Blob([csv], { type: 'text/csv' });
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `holdings_${new Date().toISOString().split('T')[0]}.csv`;
+            a.click();
+            
+            mostrarNotificacion('Holdings exportados correctamente', 'success');
+        }
+
+
         function actualizarOverviewConFiltro() {
             const filtradas = obtenerInversionesFiltradas();
             
@@ -5151,7 +5247,7 @@
             // Usar exactamente la misma estructura HTML que actualizarTarjetasResumen()
             const html = `
                 <div class="card">
-                    <div class="card-title">Valor Total ${filtroActual.tipoActivo !== 'todos' || filtroActual.inversionId !== 'todas' ? '<span style="color: var(--primary);">(Filtrado)</span>' : ''}</div>
+                    <div class="card-title">Valor Total ${filtroActual.tiposActivo.length > 0 || filtroActual.inversionesIds.length > 0 ? '<span style="color: var(--primary);">(Filtrado)</span>' : ''}</div>
                     <div class="card-value">€${formatNumber(valorTotal)}</div>
                     <div class="card-subtitle">
                         <span class="${beneficio >= 0 ? 'trend-up' : 'trend-down'}">
@@ -5561,7 +5657,186 @@
         }
 
 
-        function init() {
+        function renderBenchmarksConFiltro() {
+            const filtradas = obtenerInversionesFiltradas();
+            
+            const container = document.getElementById('tab-benchmarks');
+            if (!container) return;
+            
+            // Buscar o crear contenedor de contenido después de los filtros
+            let contenidoContainer = container.querySelector('.benchmarks-content');
+            if (!contenidoContainer) {
+                // Crear contenedor si no existe
+                contenidoContainer = document.createElement('div');
+                contenidoContainer.className = 'benchmarks-content';
+                
+                // Insertar después de los filtros
+                const filtrosDiv = container.querySelector('#filtros-benchmarks');
+                if (filtrosDiv && filtrosDiv.nextSibling) {
+                    container.insertBefore(contenidoContainer, filtrosDiv.nextSibling);
+                } else {
+                    container.appendChild(contenidoContainer);
+                }
+            }
+            
+            if (filtradas.length === 0) {
+                contenidoContainer.innerHTML = `
+                    <div style="text-align: center; padding: 60px 20px;">
+                        <div style="font-size: 3em; margin-bottom: 20px; opacity: 0.3;">🔍</div>
+                        <h3 style="color: var(--text-secondary);">
+                            No hay inversiones que coincidan con los filtros
+                        </h3>
+                        <p style="color: var(--text-muted);">
+                            Prueba cambiando los filtros o limpiándolos
+                        </p>
+                    </div>
+                `;
+                return;
+            }
+            
+            // Calcular métricas de benchmarks con inversiones filtradas
+            const benchmarks = calcularBenchmarksFiltrados(filtradas);
+            
+            const html = `
+                <div style="margin-top: 20px;">
+                    <h2 style="margin-bottom: 20px;">
+                        Comparación con Benchmarks
+                        ${filtroActual.tiposActivo.length > 0 || filtroActual.inversionesIds.length > 0 ? 
+                            '<span style="color: var(--primary); font-size: 0.8em;">(Filtrado)</span>' : ''}
+                    </h2>
+                    
+                    <!-- Resumen de Performance -->
+                    <div style="display: grid; 
+                               grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); 
+                               gap: 15px; 
+                               margin-bottom: 30px;">
+                        ${benchmarks.map(bm => `
+                            <div class="card">
+                                <div class="card-title">${bm.nombre}</div>
+                                <div class="card-value ${bm.rendimiento >= 0 ? 'success' : 'danger'}">
+                                    ${bm.rendimiento >= 0 ? '+' : ''}${bm.rendimiento.toFixed(2)}%
+                                </div>
+                                <div class="card-subtitle">${bm.periodo}</div>
+                            </div>
+                        `).join('')}
+                        
+                        <div class="card" style="border-left: 3px solid var(--primary);">
+                            <div class="card-title">Tu Portfolio</div>
+                            <div class="card-value ${benchmarks[0].tuRendimiento >= 0 ? 'success' : 'danger'}">
+                                ${benchmarks[0].tuRendimiento >= 0 ? '+' : ''}${benchmarks[0].tuRendimiento.toFixed(2)}%
+                            </div>
+                            <div class="card-subtitle">
+                                ${filtradas.length} inversión${filtradas.length > 1 ? 'es' : ''}
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Tabla Comparativa -->
+                    <div style="background: var(--bg-secondary); 
+                               border-radius: 12px; 
+                               padding: 20px;
+                               overflow-x: auto;">
+                        <table style="width: 100%; border-collapse: collapse;">
+                            <thead>
+                                <tr style="border-bottom: 2px solid var(--border);">
+                                    <th style="padding: 12px; text-align: left; color: var(--text-secondary);">Índice</th>
+                                    <th style="padding: 12px; text-align: right; color: var(--text-secondary);">Rendimiento</th>
+                                    <th style="padding: 12px; text-align: right; color: var(--text-secondary);">Tu Portfolio</th>
+                                    <th style="padding: 12px; text-align: right; color: var(--text-secondary);">Diferencia</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${benchmarks.map(bm => {
+                                    const diff = bm.tuRendimiento - bm.rendimiento;
+                                    return `
+                                        <tr style="border-bottom: 1px solid var(--border);">
+                                            <td style="padding: 12px;">
+                                                <strong>${bm.nombre}</strong>
+                                                <div style="font-size: 0.85em; color: var(--text-muted);">
+                                                    ${bm.descripcion}
+                                                </div>
+                                            </td>
+                                            <td style="padding: 12px; text-align: right;">
+                                                <span class="${bm.rendimiento >= 0 ? 'success' : 'danger'}">
+                                                    ${bm.rendimiento >= 0 ? '+' : ''}${bm.rendimiento.toFixed(2)}%
+                                                </span>
+                                            </td>
+                                            <td style="padding: 12px; text-align: right;">
+                                                <span class="${bm.tuRendimiento >= 0 ? 'success' : 'danger'}">
+                                                    ${bm.tuRendimiento >= 0 ? '+' : ''}${bm.tuRendimiento.toFixed(2)}%
+                                                </span>
+                                            </td>
+                                            <td style="padding: 12px; text-align: right;">
+                                                <span class="${diff >= 0 ? 'success' : 'danger'}" 
+                                                      style="font-weight: 600;">
+                                                    ${diff >= 0 ? '+' : ''}${diff.toFixed(2)}%
+                                                </span>
+                                            </td>
+                                        </tr>
+                                    `;
+                                }).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            `;
+            
+            contenidoContainer.innerHTML = html;
+        }
+        
+        function calcularBenchmarksFiltrados(filtradas) {
+            // Calcular rendimiento del portfolio filtrado
+            const valorTotal = filtradas.reduce((sum, inv) => sum + getValorActual(inv), 0);
+            const totalInvertido = filtradas.reduce((sum, inv) => {
+                let neto = 0;
+                if (inv.movimientos && inv.movimientos.length > 0) {
+                    inv.movimientos.forEach(m => {
+                        if (m.tipo === 'aportacion') neto += m.cantidad;
+                        if (m.tipo === 'retirada') neto -= m.cantidad;
+                    });
+                } else {
+                    neto = inv.inversionInicial || 0;
+                }
+                return sum + neto;
+            }, 0);
+            
+            const tuRendimiento = totalInvertido > 0 ? ((valorTotal - totalInvertido) / totalInvertido) * 100 : 0;
+            
+            // Benchmarks de referencia (datos aproximados - deberías usar APIs reales)
+            return [
+                {
+                    nombre: 'S&P 500',
+                    descripcion: 'Índice principal USA',
+                    rendimiento: 26.29,
+                    tuRendimiento: tuRendimiento,
+                    periodo: 'YTD 2024'
+                },
+                {
+                    nombre: 'MSCI World',
+                    descripcion: 'Acciones globales',
+                    rendimiento: 18.15,
+                    tuRendimiento: tuRendimiento,
+                    periodo: 'YTD 2024'
+                },
+                {
+                    nombre: 'IBEX 35',
+                    descripcion: 'Índice español',
+                    rendimiento: 14.80,
+                    tuRendimiento: tuRendimiento,
+                    periodo: 'YTD 2024'
+                },
+                {
+                    nombre: 'Bitcoin',
+                    descripcion: 'Criptomoneda',
+                    rendimiento: 155.40,
+                    tuRendimiento: tuRendimiento,
+                    periodo: 'YTD 2024'
+                }
+            ];
+        }
+
+
+                function init() {
             cargarDatos();
             renderFiltros('filtros-overview');
             actualizarOverview();
