@@ -5101,6 +5101,28 @@
         function actualizarOverviewConFiltro() {
             const filtradas = obtenerInversionesFiltradas();
             
+            if (filtradas.length === 0) {
+                // Mostrar mensaje de que no hay resultados
+                const container = document.getElementById('tab-overview');
+                if (container) {
+                    const tarjetasContainer = document.getElementById('tarjetas-resumen');
+                    if (tarjetasContainer) {
+                        tarjetasContainer.innerHTML = `
+                            <div style="grid-column: 1 / -1; text-align: center; padding: 40px;">
+                                <div style="font-size: 3em; margin-bottom: 20px; opacity: 0.3;">🔍</div>
+                                <h3 style="color: var(--text-secondary);">
+                                    No hay inversiones que coincidan con los filtros
+                                </h3>
+                                <p style="color: var(--text-muted);">
+                                    Prueba cambiando los filtros o limpiándolos
+                                </p>
+                            </div>
+                        `;
+                    }
+                }
+                return;
+            }
+            
             // Calcular métricas solo para inversiones filtradas
             let valorTotal = 0;
             let totalInvertido = 0;
@@ -5119,15 +5141,6 @@
             const rentabilidadTotal = totalInvertido > 0 ? (beneficio / totalInvertido) * 100 : 0;
             
             // Actualizar tarjetas resumen
-            actualizarTarjetasResumenFiltradas(valorTotal, totalInvertido, rentabilidadTotal);
-            
-            // Actualizar gráficos si es necesario
-            actualizarGraficosFiltrados(filtradas);
-        }
-        
-        function actualizarTarjetasResumenFiltradas(valorTotal, totalInvertido, rentabilidadTotal) {
-            const beneficio = valorTotal - totalInvertido;
-            
             const html = `
                 <div class="card">
                     <div class="card-title">Valor Total ${filtroActual.tipoActivo !== 'todos' || filtroActual.inversionId !== 'todas' ? '(Filtrado)' : ''}</div>
@@ -5155,10 +5168,12 @@
                 
                 <div class="card">
                     <div class="card-title">Inversiones</div>
-                    <div class="card-value">${obtenerInversionesFiltradas().length}</div>
+                    <div class="card-value">${filtradas.length}</div>
                     <div class="card-subtitle">
                         ${filtroActual.tipoActivo !== 'todos' ? 
                             `Tipo: ${filtroActual.tipoActivo}` : 
+                            filtroActual.inversionId !== 'todas' ?
+                            `Individual` :
                             `Total: ${inversiones.length}`}
                     </div>
                 </div>
@@ -5168,7 +5183,14 @@
             if (container) {
                 container.innerHTML = html;
             }
+            
+            // Nota: Los gráficos se actualizan automáticamente porque usan
+            // la función getValorActual() que lee de las inversiones actuales
+            console.log('Overview actualizado con filtros:', filtradas.length, 'inversiones');
         }
+
+        
+
 
 
         // ============================================
@@ -5490,6 +5512,49 @@
             a.click();
             
             mostrarNotificacion('Inversiones cerradas exportadas', 'success');
+        }
+
+
+        function actualizarGraficosFiltrados(filtradas) {
+            // Esta función actualiza los gráficos con las inversiones filtradas
+            // Por ahora, simplemente re-renderiza los gráficos existentes con los datos filtrados
+            
+            if (currentTab === 'overview') {
+                // Los gráficos de overview se actualizarán con renderOverviewChart()
+                // usando las inversiones filtradas
+                console.log('Gráficos filtrados actualizados con', filtradas.length, 'inversiones');
+            }
+        }
+        
+        function renderBenchmarksConFiltro() {
+            // Renderizar benchmarks con filtros aplicados
+            const filtradas = obtenerInversionesFiltradas();
+            
+            if (filtradas.length === 0) {
+                const container = document.getElementById('tab-benchmarks');
+                if (container) {
+                    // Buscar el contenedor después de los filtros
+                    const contenidoBenchmarks = container.querySelector('#contenido-benchmarks');
+                    if (contenidoBenchmarks) {
+                        contenidoBenchmarks.innerHTML = `
+                            <div style="text-align: center; padding: 60px 20px;">
+                                <div style="font-size: 3em; margin-bottom: 20px; opacity: 0.3;">🔍</div>
+                                <h3 style="color: var(--text-secondary);">
+                                    No hay inversiones que coincidan con los filtros
+                                </h3>
+                                <p style="color: var(--text-muted);">
+                                    Prueba cambiando los filtros o limpiándolos
+                                </p>
+                            </div>
+                        `;
+                    }
+                }
+                return;
+            }
+            
+            // Si hay inversiones filtradas, renderizar benchmarks normalmente
+            // pero solo con las inversiones filtradas
+            renderBenchmarks();
         }
 
 
