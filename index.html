@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Investment Tracker Pro v4.3 - Firefox Compatible + Céntimos</title>
+    <title>Investment Tracker Pro v4.4 - Filtros + Inversiones Pasadas</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.sheetjs.com/xlsx-0.20.0/package/dist/xlsx.full.min.js"></script>
     <style>
@@ -800,7 +800,7 @@
                     <circle cx="24" cy="12" r="2" fill="#00c9a7"/>
                 </svg>
                 <div>
-                    <h1>Investment Tracker Pro <span class="version-badge">v4.3</span></h1>
+                    <h1>Investment Tracker Pro <span class="version-badge">v4.4</span></h1>
                 </div>
             </div>
             <div class="header-actions">
@@ -834,6 +834,7 @@
 
         <!-- TAB: Overview -->
         <div id="tab-overview" class="tab-content active">
+            <div id="filtros-overview"></div>
             <div class="summary-cards" id="summaryCards"></div>
             
             <div class="main-content">
@@ -921,6 +922,7 @@
 
         <!-- TAB: Benchmarks -->
         <div id="tab-benchmarks" class="tab-content">
+            <div id="filtros-benchmarks"></div>
             <div class="chart-container">
                 <h2 class="panel-title">Comparación con Benchmarks</h2>
                 <p style="color: var(--text-muted); margin-bottom: 18px; font-size: 0.82rem;">
@@ -930,6 +932,8 @@
                 <div class="benchmark-comparison" id="benchmarkComparison"></div>
             </div>
         </div>
+
+        <div id="tab-cerradas" class="tab-content"></div>
 
         <!-- TAB: Holdings & Métricas -->
         <div id="tab-holdings" class="tab-content">
@@ -1177,6 +1181,8 @@
         // ============================================
         
         let inversiones = [];
+        let inversionesCerradas = [];
+        let filtroActual = { tipoActivo: 'todos', inversionId: 'todas' };
         let charts = {};
         let currentTab = 'overview';
         let movimientosTemp = []; // Para importación temporal
@@ -1571,6 +1577,7 @@
         }
 
         function cargarDatos() {
+            cargarInversionesCerradas();
             try {
                 const datos = localStorage.getItem('inversionesTrackerV3');
                 if (datos) {
@@ -1869,6 +1876,15 @@
 
         function cambiarTab(tabName) {
             currentTab = tabName;
+            
+            // Renderizar filtros según la pestaña
+            if (tabName === 'overview') {
+                renderFiltros('filtros-overview');
+            } else if (tabName === 'benchmarks') {
+                renderFiltros('filtros-benchmarks');
+            } else if (tabName === 'cerradas') {
+                renderInversionesCerradas();
+            }
             
             document.querySelectorAll('.tab').forEach(tab => tab.classList.remove('active'));
             document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
@@ -4468,7 +4484,7 @@
 
         // Agregar boton de diagnostico al HTML
         window.addEventListener('load', function() {
-            console.log('Investment Tracker v4.3 cargado');
+            console.log('Investment Tracker v4.4 cargado');
             console.log('Ejecuta diagnosticarConexion() en la consola para probar la conexion');
         });
 
@@ -4956,8 +4972,530 @@
         // INICIALIZACIÓN
         // ============================================
 
+
+        // ============================================
+        // FILTROS DE INVERSIONES - V4.4
+        // ============================================
+        
+        function renderFiltros(containerId) {
+            const container = document.getElementById(containerId);
+            if (!container) return;
+            
+            // Obtener tipos únicos
+            const tiposUnicos = [...new Set(inversiones.map(inv => inv.tipoActivo))];
+            
+            const html = `
+                <div style="display: flex; gap: 15px; margin-bottom: 25px; flex-wrap: wrap; align-items: center;">
+                    <div style="display: flex; flex-direction: column; gap: 5px;">
+                        <label style="font-size: 0.85em; color: var(--text-secondary); font-weight: 500;">
+                            Tipo de Activo
+                        </label>
+                        <select id="filtro-tipo-${containerId}" 
+                                onchange="aplicarFiltro('${containerId}')"
+                                style="background: var(--bg-input); 
+                                       color: var(--text-primary); 
+                                       border: 1px solid var(--border); 
+                                       border-radius: 8px; 
+                                       padding: 10px 15px;
+                                       font-size: 0.95em;
+                                       min-width: 200px;
+                                       cursor: pointer;">
+                            <option value="todos">Todos los tipos</option>
+                            ${tiposUnicos.map(tipo => `
+                                <option value="${tipo}" ${filtroActual.tipoActivo === tipo ? 'selected' : ''}>
+                                    ${tipo.charAt(0).toUpperCase() + tipo.slice(1)}
+                                </option>
+                            `).join('')}
+                        </select>
+                    </div>
+                    
+                    <div style="display: flex; flex-direction: column; gap: 5px;">
+                        <label style="font-size: 0.85em; color: var(--text-secondary); font-weight: 500;">
+                            Inversión Específica
+                        </label>
+                        <select id="filtro-inversion-${containerId}" 
+                                onchange="aplicarFiltro('${containerId}')"
+                                style="background: var(--bg-input); 
+                                       color: var(--text-primary); 
+                                       border: 1px solid var(--border); 
+                                       border-radius: 8px; 
+                                       padding: 10px 15px;
+                                       font-size: 0.95em;
+                                       min-width: 250px;
+                                       cursor: pointer;">
+                            <option value="todas">Todas las inversiones</option>
+                            ${inversiones
+                                .filter(inv => filtroActual.tipoActivo === 'todos' || inv.tipoActivo === filtroActual.tipoActivo)
+                                .map(inv => `
+                                    <option value="${inv.id}" ${filtroActual.inversionId === inv.id ? 'selected' : ''}>
+                                        ${inv.nombre}
+                                    </option>
+                                `).join('')}
+                        </select>
+                    </div>
+                    
+                    ${(filtroActual.tipoActivo !== 'todos' || filtroActual.inversionId !== 'todas') ? `
+                        <button onclick="limpiarFiltros('${containerId}')" 
+                                class="btn btn-secondary"
+                                style="margin-top: 20px; padding: 10px 20px;">
+                            Limpiar filtros
+                        </button>
+                    ` : ''}
+                </div>
+            `;
+            
+            container.innerHTML = html;
+        }
+        
+        function aplicarFiltro(containerId) {
+            const selectTipo = document.getElementById(`filtro-tipo-${containerId}`);
+            const selectInversion = document.getElementById(`filtro-inversion-${containerId}`);
+            
+            if (selectTipo) {
+                filtroActual.tipoActivo = selectTipo.value;
+            }
+            
+            if (selectInversion) {
+                filtroActual.inversionId = selectInversion.value;
+            }
+            
+            // Re-renderizar filtros para actualizar opciones
+            renderFiltros(containerId);
+            
+            // Actualizar la vista correspondiente
+            if (containerId.includes('overview')) {
+                actualizarOverviewConFiltro();
+            } else if (containerId.includes('benchmark')) {
+                renderBenchmarksConFiltro();
+            }
+        }
+        
+        function limpiarFiltros(containerId) {
+            filtroActual = {
+                tipoActivo: 'todos',
+                inversionId: 'todas'
+            };
+            renderFiltros(containerId);
+            
+            if (containerId.includes('overview')) {
+                actualizarOverview();
+            } else if (containerId.includes('benchmark')) {
+                renderBenchmarks();
+            }
+        }
+        
+        function obtenerInversionesFiltradas() {
+            let filtradas = [...inversiones];
+            
+            if (filtroActual.tipoActivo !== 'todos') {
+                filtradas = filtradas.filter(inv => inv.tipoActivo === filtroActual.tipoActivo);
+            }
+            
+            if (filtroActual.inversionId !== 'todas') {
+                filtradas = filtradas.filter(inv => inv.id === parseInt(filtroActual.inversionId));
+            }
+            
+            return filtradas;
+        }
+        
+        function actualizarOverviewConFiltro() {
+            const filtradas = obtenerInversionesFiltradas();
+            
+            // Calcular métricas solo para inversiones filtradas
+            let valorTotal = 0;
+            let totalInvertido = 0;
+            
+            filtradas.forEach(inv => {
+                const valor = getValorActual(inv);
+                valorTotal += valor;
+                
+                inv.movimientos.forEach(m => {
+                    if (m.tipo === 'aportacion') totalInvertido += m.cantidad;
+                    if (m.tipo === 'retirada') totalInvertido -= m.cantidad;
+                });
+            });
+            
+            const beneficio = valorTotal - totalInvertido;
+            const rentabilidadTotal = totalInvertido > 0 ? (beneficio / totalInvertido) * 100 : 0;
+            
+            // Actualizar tarjetas resumen
+            actualizarTarjetasResumenFiltradas(valorTotal, totalInvertido, rentabilidadTotal);
+            
+            // Actualizar gráficos si es necesario
+            actualizarGraficosFiltrados(filtradas);
+        }
+        
+        function actualizarTarjetasResumenFiltradas(valorTotal, totalInvertido, rentabilidadTotal) {
+            const beneficio = valorTotal - totalInvertido;
+            
+            const html = `
+                <div class="card">
+                    <div class="card-title">Valor Total ${filtroActual.tipoActivo !== 'todos' || filtroActual.inversionId !== 'todas' ? '(Filtrado)' : ''}</div>
+                    <div class="card-value">€${formatNumber(valorTotal)}</div>
+                    <div class="card-subtitle">
+                        <span class="${beneficio >= 0 ? 'trend-up' : 'trend-down'}">
+                            ${beneficio >= 0 ? '+' : ''}€${formatNumber(beneficio)}
+                        </span>
+                    </div>
+                </div>
+                
+                <div class="card">
+                    <div class="card-title">Total Invertido</div>
+                    <div class="card-value">€${formatNumber(totalInvertido)}</div>
+                    <div class="card-subtitle">Neto: aportaciones - retiradas</div>
+                </div>
+                
+                <div class="card">
+                    <div class="card-title">Rentabilidad Total</div>
+                    <div class="card-value ${rentabilidadTotal >= 0 ? 'trend-up' : 'trend-down'}">
+                        ${rentabilidadTotal.toFixed(2)}%
+                    </div>
+                    <div class="card-subtitle">Beneficio neto / Capital invertido</div>
+                </div>
+                
+                <div class="card">
+                    <div class="card-title">Inversiones</div>
+                    <div class="card-value">${obtenerInversionesFiltradas().length}</div>
+                    <div class="card-subtitle">
+                        ${filtroActual.tipoActivo !== 'todos' ? 
+                            `Tipo: ${filtroActual.tipoActivo}` : 
+                            `Total: ${inversiones.length}`}
+                    </div>
+                </div>
+            `;
+            
+            const container = document.getElementById('tarjetas-resumen');
+            if (container) {
+                container.innerHTML = html;
+            }
+        }
+
+
+        // ============================================
+        // INVERSIONES CERRADAS (PASADAS) - V4.4
+        // ============================================
+        
+        function cargarInversionesCerradas() {
+            const data = localStorage.getItem('inversionesCerradas');
+            if (data) {
+                try {
+                    inversionesCerradas = JSON.parse(data);
+                } catch (e) {
+                    console.error('Error cargando inversiones cerradas:', e);
+                    inversionesCerradas = [];
+                }
+            }
+        }
+        
+        function guardarInversionesCerradas() {
+            try {
+                localStorage.setItem('inversionesCerradas', JSON.stringify(inversionesCerradas));
+            } catch (e) {
+                console.error('Error guardando inversiones cerradas:', e);
+            }
+        }
+        
+        function cerrarPosicion(invId) {
+            const inv = inversiones.find(i => i.id === invId);
+            if (!inv) {
+                mostrarNotificacion('Inversion no encontrada', 'danger');
+                return;
+            }
+            
+            // Confirmar cierre
+            if (!confirm(`Cerrar posicion de ${inv.nombre}?\n\nEsto movera la inversion a "Inversiones Pasadas" y quedara como registro historico.`)) {
+                return;
+            }
+            
+            // Calcular datos finales
+            const valorActual = getValorActual(inv);
+            let totalInvertido = 0;
+            let totalRetirado = 0;
+            let dividendosTotales = 0;
+            
+            inv.movimientos.forEach(m => {
+                if (m.tipo === 'aportacion') totalInvertido += m.cantidad;
+                if (m.tipo === 'retirada') totalRetirado += m.cantidad;
+                if (m.tipo === 'dividendo') dividendosTotales += m.cantidad;
+            });
+            
+            const capitalNeto = totalInvertido - totalRetirado;
+            const beneficio = valorActual - capitalNeto;
+            const rentabilidad = capitalNeto > 0 ? (beneficio / capitalNeto) * 100 : 0;
+            
+            // Crear registro de cierre
+            const inversionCerrada = {
+                ...inv,
+                fechaCierre: new Date().toISOString(),
+                valorCierre: valorActual,
+                totalInvertido: totalInvertido,
+                totalRetirado: totalRetirado,
+                capitalNeto: capitalNeto,
+                dividendosTotales: dividendosTotales,
+                beneficioTotal: beneficio,
+                rentabilidadTotal: rentabilidad,
+                duracionDias: calcularDuracionDias(inv.fechaInicio, new Date())
+            };
+            
+            // Añadir a inversiones cerradas
+            inversionesCerradas.push(inversionCerrada);
+            guardarInversionesCerradas();
+            
+            // Eliminar de inversiones activas
+            inversiones = inversiones.filter(i => i.id !== invId);
+            guardarDatos();
+            
+            // Actualizar UI
+            renderInversiones();
+            actualizarOverview();
+            
+            mostrarNotificacion(`Posicion de ${inv.nombre} cerrada correctamente`, 'success');
+            
+            // Cambiar a pestaña de inversiones cerradas
+            cambiarTab('cerradas');
+        }
+        
+        function calcularDuracionDias(fechaInicio, fechaFin) {
+            const inicio = new Date(fechaInicio);
+            const fin = new Date(fechaFin);
+            const diffTime = Math.abs(fin - inicio);
+            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+            return diffDays;
+        }
+        
+        function renderInversionesCerradas() {
+            const container = document.getElementById('tab-cerradas');
+            if (!container) return;
+            
+            if (inversionesCerradas.length === 0) {
+                container.innerHTML = `
+                    <div style="text-align: center; padding: 60px 20px;">
+                        <div style="font-size: 3em; margin-bottom: 20px; opacity: 0.3;">📁</div>
+                        <h3 style="color: var(--text-secondary); margin-bottom: 10px;">
+                            No hay inversiones cerradas
+                        </h3>
+                        <p style="color: var(--text-muted);">
+                            Las inversiones que cierres apareceran aqui como registro historico
+                        </p>
+                    </div>
+                `;
+                return;
+            }
+            
+            // Ordenar por fecha de cierre (más recientes primero)
+            const ordenadas = [...inversionesCerradas].sort((a, b) => 
+                new Date(b.fechaCierre) - new Date(a.fechaCierre)
+            );
+            
+            // Calcular totales
+            const totalBeneficio = ordenadas.reduce((sum, inv) => sum + inv.beneficioTotal, 0);
+            const totalInvertido = ordenadas.reduce((sum, inv) => sum + inv.capitalNeto, 0);
+            const rentabilidadMedia = totalInvertido > 0 ? (totalBeneficio / totalInvertido) * 100 : 0;
+            
+            const html = `
+                <div style="margin-bottom: 30px;">
+                    <h2 style="margin-bottom: 20px;">Inversiones Cerradas</h2>
+                    
+                    <!-- Resumen de inversiones cerradas -->
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-bottom: 30px;">
+                        <div class="card">
+                            <div class="card-title">Total Cerradas</div>
+                            <div class="card-value">${inversionesCerradas.length}</div>
+                            <div class="card-subtitle">Posiciones historicas</div>
+                        </div>
+                        
+                        <div class="card">
+                            <div class="card-title">Beneficio Total</div>
+                            <div class="card-value ${totalBeneficio >= 0 ? 'trend-up' : 'trend-down'}">
+                                ${totalBeneficio >= 0 ? '+' : ''}€${formatNumber(totalBeneficio)}
+                            </div>
+                            <div class="card-subtitle">De todas las cerradas</div>
+                        </div>
+                        
+                        <div class="card">
+                            <div class="card-title">Rentabilidad Media</div>
+                            <div class="card-value ${rentabilidadMedia >= 0 ? 'trend-up' : 'trend-down'}">
+                                ${rentabilidadMedia.toFixed(2)}%
+                            </div>
+                            <div class="card-subtitle">Promedio ponderado</div>
+                        </div>
+                    </div>
+                    
+                    <!-- Botones de acción -->
+                    <div style="margin-bottom: 20px; display: flex; gap: 10px; flex-wrap: wrap;">
+                        <button onclick="exportarInversionesCerradas()" class="btn btn-secondary">
+                            Exportar CSV
+                        </button>
+                        <button onclick="mostrarEstadisticasCerradas()" class="btn btn-secondary">
+                            Ver Estadísticas
+                        </button>
+                    </div>
+                    
+                    <!-- Lista de inversiones cerradas -->
+                    <div style="display: grid; gap: 15px;">
+                        ${ordenadas.map(inv => renderTarjetaInversionCerrada(inv)).join('')}
+                    </div>
+                </div>
+            `;
+            
+            container.innerHTML = html;
+        }
+        
+        function renderTarjetaInversionCerrada(inv) {
+            const fechaCierre = new Date(inv.fechaCierre).toLocaleDateString('es-ES');
+            const fechaInicio = new Date(inv.fechaInicio).toLocaleDateString('es-ES');
+            const duracionAnos = (inv.duracionDias / 365).toFixed(1);
+            
+            return `
+                <div class="investment-card" style="opacity: 0.95; border-left: 3px solid ${inv.beneficioTotal >= 0 ? 'var(--green)' : 'var(--red)'};">
+                    <div class="investment-header">
+                        <div class="investment-name">
+                            ${inv.nombre}
+                            <span style="background: var(--bg-secondary); 
+                                         padding: 4px 10px; 
+                                         border-radius: 6px; 
+                                         font-size: 0.75em;
+                                         margin-left: 10px;
+                                         color: var(--text-secondary);">
+                                CERRADA
+                            </span>
+                        </div>
+                        <div class="investment-actions">
+                            <button onclick="verDetallesCerrada(${inv.id})" 
+                                    class="btn btn-icon" 
+                                    title="Ver detalles">
+                                👁️
+                            </button>
+                            <button onclick="eliminarInversionCerrada(${inv.id})" 
+                                    class="btn btn-icon" 
+                                    title="Eliminar registro"
+                                    style="color: var(--red);">
+                                🗑️
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 15px; margin-top: 15px;">
+                        <div>
+                            <div style="font-size: 0.85em; color: var(--text-secondary); margin-bottom: 5px;">
+                                Periodo
+                            </div>
+                            <div style="font-weight: 500;">
+                                ${fechaInicio} → ${fechaCierre}
+                            </div>
+                            <div style="font-size: 0.85em; color: var(--text-muted);">
+                                ${inv.duracionDias} días (${duracionAnos} años)
+                            </div>
+                        </div>
+                        
+                        <div>
+                            <div style="font-size: 0.85em; color: var(--text-secondary); margin-bottom: 5px;">
+                                Capital Invertido
+                            </div>
+                            <div style="font-weight: 500;">
+                                €${formatNumber(inv.capitalNeto)}
+                            </div>
+                            ${inv.totalRetirado > 0 ? `
+                                <div style="font-size: 0.85em; color: var(--text-muted);">
+                                    Retirado: €${formatNumber(inv.totalRetirado)}
+                                </div>
+                            ` : ''}
+                        </div>
+                        
+                        <div>
+                            <div style="font-size: 0.85em; color: var(--text-secondary); margin-bottom: 5px;">
+                                Valor al Cierre
+                            </div>
+                            <div style="font-weight: 500;">
+                                €${formatNumber(inv.valorCierre)}
+                            </div>
+                        </div>
+                        
+                        <div>
+                            <div style="font-size: 0.85em; color: var(--text-secondary); margin-bottom: 5px;">
+                                Beneficio
+                            </div>
+                            <div style="font-weight: 500; color: ${inv.beneficioTotal >= 0 ? 'var(--green)' : 'var(--red)'};">
+                                ${inv.beneficioTotal >= 0 ? '+' : ''}€${formatNumber(inv.beneficioTotal)}
+                            </div>
+                        </div>
+                        
+                        <div>
+                            <div style="font-size: 0.85em; color: var(--text-secondary); margin-bottom: 5px;">
+                                Rentabilidad
+                            </div>
+                            <div style="font-weight: 600; font-size: 1.1em; color: ${inv.rentabilidadTotal >= 0 ? 'var(--green)' : 'var(--red)'};">
+                                ${inv.rentabilidadTotal >= 0 ? '+' : ''}${inv.rentabilidadTotal.toFixed(2)}%
+                            </div>
+                        </div>
+                        
+                        ${inv.dividendosTotales > 0 ? `
+                            <div>
+                                <div style="font-size: 0.85em; color: var(--text-secondary); margin-bottom: 5px;">
+                                    Dividendos
+                                </div>
+                                <div style="font-weight: 500; color: var(--green);">
+                                    €${formatNumber(inv.dividendosTotales)}
+                                </div>
+                            </div>
+                        ` : ''}
+                    </div>
+                </div>
+            `;
+        }
+        
+        function eliminarInversionCerrada(invId) {
+            if (!confirm('Eliminar este registro de inversion cerrada?\n\nEsta accion no se puede deshacer.')) {
+                return;
+            }
+            
+            inversionesCerradas = inversionesCerradas.filter(inv => inv.id !== invId);
+            guardarInversionesCerradas();
+            renderInversionesCerradas();
+            mostrarNotificacion('Registro eliminado', 'success');
+        }
+        
+        function exportarInversionesCerradas() {
+            if (inversionesCerradas.length === 0) {
+                mostrarNotificacion('No hay inversiones cerradas para exportar', 'danger');
+                return;
+            }
+            
+            const headers = ['Nombre', 'Tipo', 'Fecha Inicio', 'Fecha Cierre', 'Duracion (dias)', 
+                           'Capital Invertido', 'Valor Cierre', 'Beneficio', 'Rentabilidad %', 'Dividendos'];
+            
+            const rows = inversionesCerradas.map(inv => [
+                inv.nombre,
+                inv.tipoActivo,
+                new Date(inv.fechaInicio).toLocaleDateString('es-ES'),
+                new Date(inv.fechaCierre).toLocaleDateString('es-ES'),
+                inv.duracionDias,
+                inv.capitalNeto.toFixed(2),
+                inv.valorCierre.toFixed(2),
+                inv.beneficioTotal.toFixed(2),
+                inv.rentabilidadTotal.toFixed(2),
+                inv.dividendosTotales.toFixed(2)
+            ]);
+            
+            let csv = headers.join(',') + '\n';
+            rows.forEach(row => {
+                csv += row.join(',') + '\n';
+            });
+            
+            const blob = new Blob([csv], { type: 'text/csv' });
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `inversiones_cerradas_${new Date().toISOString().split('T')[0]}.csv`;
+            a.click();
+            
+            mostrarNotificacion('Inversiones cerradas exportadas', 'success');
+        }
+
+
         function init() {
             cargarDatos();
+            renderFiltros('filtros-overview');
             actualizarOverview();
             if (currentTab === 'inversiones') renderInversiones();
             if (currentTab === 'analisis') renderAnalisis();
