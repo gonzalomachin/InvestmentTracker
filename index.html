@@ -5103,90 +5103,93 @@
             
             if (filtradas.length === 0) {
                 // Mostrar mensaje de que no hay resultados
-                const container = document.getElementById('tab-overview');
-                if (container) {
-                    const tarjetasContainer = document.getElementById('tarjetas-resumen');
-                    if (tarjetasContainer) {
-                        tarjetasContainer.innerHTML = `
-                            <div style="grid-column: 1 / -1; text-align: center; padding: 40px;">
-                                <div style="font-size: 3em; margin-bottom: 20px; opacity: 0.3;">🔍</div>
-                                <h3 style="color: var(--text-secondary);">
-                                    No hay inversiones que coincidan con los filtros
-                                </h3>
-                                <p style="color: var(--text-muted);">
-                                    Prueba cambiando los filtros o limpiándolos
-                                </p>
-                            </div>
-                        `;
-                    }
-                }
+                const html = `
+                    <div style="grid-column: 1 / -1; text-align: center; padding: 40px;">
+                        <div style="font-size: 3em; margin-bottom: 20px; opacity: 0.3;">🔍</div>
+                        <h3 style="color: var(--text-secondary);">
+                            No hay inversiones que coincidan con los filtros
+                        </h3>
+                        <p style="color: var(--text-muted);">
+                            Prueba cambiando los filtros o limpiándolos
+                        </p>
+                    </div>
+                `;
+                document.getElementById('summaryCards').innerHTML = html;
                 return;
             }
             
             // Calcular métricas solo para inversiones filtradas
-            let valorTotal = 0;
-            let totalInvertido = 0;
+            const valorTotal = filtradas.reduce((sum, inv) => sum + getValorActual(inv), 0);
             
-            filtradas.forEach(inv => {
-                const valor = getValorActual(inv);
-                valorTotal += valor;
-                
-                inv.movimientos.forEach(m => {
-                    if (m.tipo === 'aportacion') totalInvertido += m.cantidad;
-                    if (m.tipo === 'retirada') totalInvertido -= m.cantidad;
-                });
-            });
+            const totalInvertido = filtradas.reduce((sum, inv) => {
+                let neto = 0;
+                if (inv.movimientos && inv.movimientos.length > 0) {
+                    inv.movimientos.forEach(m => {
+                        if (m.tipo === 'aportacion') neto += m.cantidad;
+                        if (m.tipo === 'retirada') neto -= m.cantidad;
+                    });
+                } else {
+                    neto = inv.inversionInicial || 0;
+                }
+                return sum + neto;
+            }, 0);
+            
+            const objetivoTotal = filtradas.reduce((sum, inv) => sum + (inv.objetivo || 0), 0);
             
             const beneficio = valorTotal - totalInvertido;
-            const rentabilidadTotal = totalInvertido > 0 ? (beneficio / totalInvertido) * 100 : 0;
+            const rentabilidadTotal = totalInvertido > 0 ? ((beneficio / totalInvertido) * 100) : 0;
             
-            // Actualizar tarjetas resumen
+            // Calcular TIR ponderada solo de inversiones filtradas
+            let tirPonderada = 0;
+            filtradas.forEach(inv => {
+                const tir = calcularTIR(inv);
+                const peso = getValorActual(inv);
+                tirPonderada += tir * peso;
+            });
+            tirPonderada = valorTotal > 0 ? tirPonderada / valorTotal : 0;
+            
+            // Usar exactamente la misma estructura HTML que actualizarTarjetasResumen()
             const html = `
                 <div class="card">
-                    <div class="card-title">Valor Total ${filtroActual.tipoActivo !== 'todos' || filtroActual.inversionId !== 'todas' ? '(Filtrado)' : ''}</div>
+                    <div class="card-title">Valor Total ${filtroActual.tipoActivo !== 'todos' || filtroActual.inversionId !== 'todas' ? '<span style="color: var(--primary);">(Filtrado)</span>' : ''}</div>
                     <div class="card-value">€${formatNumber(valorTotal)}</div>
                     <div class="card-subtitle">
                         <span class="${beneficio >= 0 ? 'trend-up' : 'trend-down'}">
-                            ${beneficio >= 0 ? '+' : ''}€${formatNumber(beneficio)}
+                            ${beneficio >= 0 ? '^' : 'v'} €${formatNumber(Math.abs(beneficio))}
                         </span>
                     </div>
                 </div>
-                
                 <div class="card">
                     <div class="card-title">Total Invertido</div>
                     <div class="card-value">€${formatNumber(totalInvertido)}</div>
                     <div class="card-subtitle">Neto: aportaciones - retiradas</div>
                 </div>
-                
+                <div class="card">
+                    <div class="card-title">TIR Portfolio</div>
+                    <div class="card-value ${tirPonderada >= 0 ? 'success' : 'danger'}">
+                        ${tirPonderada >= 0 ? '+' : ''}${tirPonderada.toFixed(2)}%
+                    </div>
+                    <div class="card-subtitle">Tasa Interna de Retorno anualizada</div>
+                </div>
                 <div class="card">
                     <div class="card-title">Rentabilidad Total</div>
-                    <div class="card-value ${rentabilidadTotal >= 0 ? 'trend-up' : 'trend-down'}">
-                        ${rentabilidadTotal.toFixed(2)}%
+                    <div class="card-value ${rentabilidadTotal >= 0 ? 'success' : 'danger'}">
+                        ${rentabilidadTotal >= 0 ? '+' : ''}${rentabilidadTotal.toFixed(2)}%
                     </div>
                     <div class="card-subtitle">Beneficio neto / Capital invertido</div>
                 </div>
-                
                 <div class="card">
-                    <div class="card-title">Inversiones</div>
-                    <div class="card-value">${filtradas.length}</div>
-                    <div class="card-subtitle">
-                        ${filtroActual.tipoActivo !== 'todos' ? 
-                            `Tipo: ${filtroActual.tipoActivo}` : 
-                            filtroActual.inversionId !== 'todas' ?
-                            `Individual` :
-                            `Total: ${inversiones.length}`}
-                    </div>
+                    <div class="card-title">Objetivo Total</div>
+                    <div class="card-value">€${formatNumber(objetivoTotal)}</div>
+                    <div class="card-subtitle">Progreso: ${objetivoTotal > 0 ? ((valorTotal/objetivoTotal)*100).toFixed(1) : 0}%</div>
                 </div>
             `;
             
-            const container = document.getElementById('tarjetas-resumen');
-            if (container) {
-                container.innerHTML = html;
-            }
+            document.getElementById('summaryCards').innerHTML = html;
             
-            // Nota: Los gráficos se actualizan automáticamente porque usan
-            // la función getValorActual() que lee de las inversiones actuales
             console.log('Overview actualizado con filtros:', filtradas.length, 'inversiones');
+            console.log('Valor total filtrado:', valorTotal);
+            console.log('Total invertido filtrado:', totalInvertido);
         }
 
         
