@@ -3974,65 +3974,63 @@
         // -- Normalizar ticker según el mercado --
         function normalizarTicker(ticker) {
             if (!ticker) return ticker;
-            
             ticker = ticker.trim().toUpperCase();
             
-            // Patrones conocidos para diferentes mercados
-            const patrones = {
-                // Bolsa Española (IBEX 35) - añadir .MC
-                'TEF': 'TEF.MC',      // Telefónica
-                'SAN': 'SAN.MC',      // Santander
-                'BBVA': 'BBVA.MC',    // BBVA
-                'IBE': 'IBE.MC',      // Iberdrola
-                'ITX': 'ITX.MC',      // Inditex
-                'REP': 'REP.MC',      // Repsol
-                'CABK': 'CABK.MC',    // CaixaBank
-                'FER': 'FER.MC',      // Ferrovial
-                'ACS': 'ACS.MC',      // ACS
-                'ENG': 'ENG.MC',      // Enagás
-                
-                // Si ya tiene .MC, dejarlo
-                // Si tiene 3-4 letras sin punto, podría ser español
-            };
-            
-            // Si está en patrones conocidos, usar la versión correcta
-            if (patrones[ticker]) {
-                return patrones[ticker];
-            }
-            
-            // Si ya tiene sufijo, dejarlo como está
-            if (ticker.includes('.') || ticker.includes('-')) {
+            // Si ya tiene sufijo, devolverlo tal cual
+            if (ticker.includes('.')) {
                 return ticker;
             }
             
-            // Detectar por longitud y características
-            // Acciones USA: generalmente 1-5 letras sin sufijo
-            // Acciones Europa: generalmente necesitan sufijo
-            
-            // Si son 3-4 letras mayúsculas y no es un ticker USA conocido
+            // Lista ampliada de tickers USA comunes de 3-5 letras
             const tickersUSAComunes = [
-                'AAPL', 'MSFT', 'GOOGL', 'GOOG', 'AMZN', 'TSLA', 'META', 'NVDA',
-                'AMD', 'INTC', 'NFLX', 'DIS', 'BA', 'JPM', 'BAC', 'WMT', 'XOM',
-                'VOO', 'VTI', 'SPY', 'QQQ', 'IWM', 'VEA', 'VWO', 'AGG', 'BND',
-                'GLD', 'SLV', 'USO', 'TLT', 'ARKK', 'ARKG', 'ARKW'
+                // 3 letras
+                'IBM', 'AMD', 'MMM', 'AIG', 'ALL', 'AXP', 'BA', 'BAC', 'BK', 'CAT',
+                'CVX', 'DOW', 'DIS', 'GE', 'GM', 'GPS', 'HD', 'HPQ', 'JPM', 'KO',
+                'LOW', 'MCD', 'MMC', 'MRK', 'NKE', 'PFE', 'PG', 'TGT', 'UNH', 'UPS',
+                'USB', 'VZ', 'WBA', 'WFC', 'WMT', 'XOM',
+                // 4 letras - NASDAQ principalmente
+                'AAPL', 'MSFT', 'GOOGL', 'GOOG', 'AMZN', 'NVDA', 'TSLA', 'META', 'NFLX',
+                'ASML', 'AVGO', 'COST', 'ADBE', 'CSCO', 'CMCSA', 'INTC', 'QCOM', 'TMUS',
+                'INTU', 'AMAT', 'TXN', 'BKNG', 'AMGN', 'ISRG', 'SBUX', 'GILD', 'MDLZ',
+                'ADI', 'VRTX', 'LRCX', 'REGN', 'PYPL', 'ATVI', 'CHTR', 'FISV', 'NXPI',
+                'KLAC', 'MELI', 'SNPS', 'CDNS', 'ASML', 'MNST', 'FTNT', 'MRVL', 'WDAY',
+                'ADSK', 'PAYX', 'ORLY', 'CTAS', 'DXCM', 'IDXX', 'BIIB', 'ILMN', 'ALGN',
+                'PCAR', 'VRSK', 'FAST', 'CTSH', 'EBAY', 'ODFL', 'CPRT', 'ROST', 'SGEN',
+                'PESI', 'PRGS', 'ROKU', 'DOCU', 'OKTA', 'TWLO', 'SNAP', 'UBER', 'LYFT',
+                // 5 letras - Principalmente NASDAQ
+                'GOOGL', 'GOOG'
             ];
             
+            // Si está en la lista de USA, devolver sin sufijo
             if (tickersUSAComunes.includes(ticker)) {
                 return ticker;
             }
             
-            // Si tiene exactamente 3 letras y no está en lista USA, probablemente es español
+            // Tickers españoles conocidos (lista expandible)
+            const tickersEspañoles = [
+                'TEF', 'SAN', 'BBVA', 'IBE', 'ITX', 'REP', 'ACS', 'FER', 'REE', 'ENG',
+                'MAP', 'CABK', 'AENA', 'GRF', 'MRL', 'ACX', 'ANA', 'COL', 'IAG', 'SAB',
+                'CLNX', 'ELE', 'FDR', 'NTGY', 'RED', 'VIS'
+            ];
+            
+            // Si está en la lista española, añadir .MC
+            if (tickersEspañoles.includes(ticker)) {
+                console.log(`Ticker "${ticker}" es español conocido. Añadiendo .MC`);
+                return ticker + '.MC';
+            }
+            
+            // Si tiene exactamente 3 letras y NO está en lista USA, probablemente es español
+            // PERO solo si no es un ticker común internacional
             if (ticker.length === 3 && /^[A-Z]{3}$/.test(ticker)) {
-                console.log(`️ Ticker "${ticker}" detectado como posible acción española. Agregando .MC`);
+                // Verificar si podría ser internacional (UK, otros)
+                // Por defecto, asumir español si es 3 letras
+                console.log(`Ticker "${ticker}" de 3 letras no reconocido. Asumiendo español (.MC)`);
                 return ticker + '.MC';
             }
             
-            // Acciones de 4 letras mayúsculas sin números podrían ser españolas
-            if (ticker.length === 4 && /^[A-Z]{4}$/.test(ticker) && !tickersUSAComunes.includes(ticker)) {
-                console.log(`️ Ticker "${ticker}" detectado como posible acción española. Agregando .MC`);
-                return ticker + '.MC';
-            }
-            
+            // Para tickers de 4+ letras, NO asumir mercado
+            // El usuario debe especificar el sufijo si no es USA
+            console.log(`Ticker "${ticker}" no reconocido. Usando sin sufijo (asumiendo USA/NASDAQ)`);
             return ticker;
         }
 
