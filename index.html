@@ -4831,93 +4831,98 @@
             const container = document.getElementById('metricas-acciones-container');
             if (!container) return;
             
-            container.innerHTML = '<p style="text-align: center; padding: 20px;">⟳ Cargando métricas...</p>';
+            container.innerHTML = '<p style="text-align: center; padding: 20px;">⟳ Cargando métricas desde Yahoo Finance...</p>';
             
-            const accionesConTicker = inversiones.filter(inv => inv.ticker);
-            const metricas = [];
+            const accionesConTicker = inversiones.filter(inv => inv.ticker && (inv.tipoActivo === 'acciones' || !inv.tipoActivo));
             
-            for (const inv of accionesConTicker) {
-                const datos = await obtenerMetricasAccion(inv.ticker);
-                if (datos) {
-                    metricas.push({
-                        nombre: inv.nombre,
-                        ticker: inv.ticker,
-                        ...datos
-                    });
-                }
-                await new Promise(resolve => setTimeout(resolve, 500));
-            }
-            
-            // Guardar métricas en las inversiones
-            metricas.forEach(m => {
-                const inv = inversiones.find(i => i.ticker === m.ticker);
-                if (inv) {
-                    inv.metricas = m;
-                }
-            });
-            
-            guardarDatos();
-            renderMetricasAcciones();
-        }
-
-        function renderMetricasAcciones() {
-            const container = document.getElementById('metricas-acciones-container');
-            if (!container) return;
-            
-            const accionesConMetricas = inversiones.filter(inv => inv.metricas);
-            
-            if (accionesConMetricas.length === 0) {
-                container.innerHTML = `
-                    <p style="text-align: center; padding: 20px; color: var(--text-secondary);">
-                        No hay métricas cargadas. Presiona "Actualizar Métricas" para cargarlas.
-                    </p>
-                `;
+            if (accionesConTicker.length === 0) {
+                container.innerHTML = '<p style="text-align: center; padding: 20px; color: var(--text-muted);">No hay acciones con ticker configurado</p>';
                 return;
             }
             
-            const html = accionesConMetricas.map(inv => {
-                const m = inv.metricas;
-                return `
-                    <div style="border: 1px solid var(--border); border-radius: 10px; padding: 20px; margin-bottom: 15px;">
-                        <h4 style="margin-bottom: 15px; font-size: 1.2em;">${inv.nombre} (${inv.ticker})</h4>
-                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 15px;">
-                            ${m.pe ? `
-                                <div>
-                                    <div style="font-size: 0.85em; color: var(--text-secondary);">P/E Ratio</div>
-                                    <div style="font-size: 1.3em; font-weight: bold;">${m.pe.toFixed(2)}</div>
-                                </div>
-                            ` : ''}
-                            ${m.dividendYield ? `
-                                <div>
-                                    <div style="font-size: 0.85em; color: var(--text-secondary);">Dividend Yield</div>
-                                    <div style="font-size: 1.3em; font-weight: bold; color: #00c9a7;">${m.dividendYield.toFixed(2)}%</div>
-                                </div>
-                            ` : ''}
-                            ${m.beta ? `
-                                <div>
-                                    <div style="font-size: 0.85em; color: var(--text-secondary);">Beta</div>
-                                    <div style="font-size: 1.3em; font-weight: bold;">${m.beta.toFixed(2)}</div>
-                                </div>
-                            ` : ''}
-                            ${m.marketCap ? `
-                                <div>
-                                    <div style="font-size: 0.85em; color: var(--text-secondary);">Market Cap</div>
-                                    <div style="font-size: 1.3em; font-weight: bold;">$${(m.marketCap / 1e9).toFixed(1)}B</div>
-                                </div>
-                            ` : ''}
-                            ${m.eps ? `
-                                <div>
-                                    <div style="font-size: 0.85em; color: var(--text-secondary);">EPS</div>
-                                    <div style="font-size: 1.3em; font-weight: bold;">$${m.eps.toFixed(2)}</div>
-                                </div>
-                            ` : ''}
-                        </div>
-                        ${m.sector ? `<p style="margin-top: 10px; font-size: 0.9em; color: var(--text-secondary);"><strong>Sector:</strong> ${m.sector}</p>` : ''}
-                    </div>
-                `;
-            }).join('');
+            const metricas = [];
+            
+            for (const inv of accionesConTicker) {
+                try {
+                    console.log('Obteniendo métricas de', inv.ticker);
+                    const datos = await obtenerPrecioYahoo(inv.ticker);
+                    
+                    if (datos) {
+                        const numAcciones = inv.numAcciones || calcularNumAccionesTotales(inv);
+                        const valorTotal = getValorActual(inv);
+                        
+                        metricas.push({
+                            nombre: inv.nombre,
+                            ticker: inv.ticker,
+                            precio: datos.precio,
+                            moneda: datos.moneda,
+                            numAcciones: numAcciones,
+                            valorTotal: valorTotal
+                        });
+                        
+                        console.log('✓ Métricas obtenidas:', inv.ticker, datos.precio, datos.moneda);
+                    }
+                } catch (error) {
+                    console.error(`Error obteniendo métricas de ${inv.ticker}:`, error);
+                }
+                
+                await new Promise(resolve => setTimeout(resolve, 800));
+            }
+            
+            if (metricas.length === 0) {
+                container.innerHTML = '<p style="text-align: center; padding: 40px; color: var(--text-muted);">No se pudieron cargar métricas. Verifica los tickers.</p>';
+                return;
+            }
+            
+            renderTablaMetricasAcciones(metricas);
+        }
+
+        function renderTablaMetricasAcciones(metricas) {
+            const container = document.getElementById('metricas-acciones-container');
+            if (!container) return;
+            
+            const html = `
+                <div style="overflow-x: auto;">
+                    <table style="width: 100%; border-collapse: collapse;">
+                        <thead>
+                            <tr style="border-bottom: 2px solid var(--border); background: var(--bg-secondary);">
+                                <th style="padding: 12px; text-align: left;">Acción</th>
+                                <th style="padding: 12px; text-align: left;">Ticker</th>
+                                <th style="padding: 12px; text-align: right;">Precio Actual</th>
+                                <th style="padding: 12px; text-align: right;">Acciones</th>
+                                <th style="padding: 12px; text-align: right;">Valor Total</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${metricas.map(m => `
+                                <tr style="border-bottom: 1px solid var(--border);">
+                                    <td style="padding: 12px;"><strong>${m.nombre}</strong></td>
+                                    <td style="padding: 12px;">
+                                        <span style="font-family: monospace; background: var(--bg-primary); padding: 4px 8px; border-radius: 4px;">
+                                            ${m.ticker}
+                                        </span>
+                                    </td>
+                                    <td style="padding: 12px; text-align: right;">
+                                        <strong>${m.precio.toFixed(2)} ${m.moneda}</strong>
+                                    </td>
+                                    <td style="padding: 12px; text-align: right;">
+                                        ${m.numAcciones ? formatNumber(m.numAcciones) : '-'}
+                                    </td>
+                                    <td style="padding: 12px; text-align: right;">
+                                        <strong style="color: var(--primary);">€${formatNumber(m.valorTotal)}</strong>
+                                    </td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                </div>
+                <p style="font-size: 0.85em; color: var(--text-muted); margin-top: 15px; text-align: center;">
+                    ✓ Última actualización: ${new Date().toLocaleString('es-ES')}
+                </p>
+            `;
             
             container.innerHTML = html;
+            mostrarNotificacion(`Métricas actualizadas: ${metricas.length} acciones`, 'success');
         }
 
         function renderFondosSimilares() {
@@ -5102,7 +5107,7 @@
             if (containerId.includes('overview')) {
                 actualizarOverviewConFiltro();
             } else if (containerId.includes('benchmark')) {
-                actualizarOverview(); // Por ahora usa la misma función
+                renderBenchmarksConFiltro();
             }
         }
         
