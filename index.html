@@ -5117,7 +5117,12 @@
                 inversionesIds: []
             };
             renderFiltros(containerId);
-            actualizarOverview();
+            
+            if (containerId.includes('overview')) {
+                actualizarOverview();
+            } else if (containerId.includes('benchmark')) {
+                renderBenchmarks();
+            }
         }
         
         function obtenerInversionesFiltradas() {
@@ -5578,34 +5583,114 @@
         }
         
         function renderBenchmarksConFiltro() {
-            // Renderizar benchmarks con filtros aplicados
             const filtradas = obtenerInversionesFiltradas();
             
+            console.log('=== RENDERIZANDO BENCHMARKS CON FILTROS ===');
+            console.log('Inversiones filtradas:', filtradas.length);
+            
             if (filtradas.length === 0) {
-                const container = document.getElementById('tab-benchmarks');
-                if (container) {
-                    // Buscar el contenedor después de los filtros
-                    const contenidoBenchmarks = container.querySelector('#contenido-benchmarks');
-                    if (contenidoBenchmarks) {
-                        contenidoBenchmarks.innerHTML = `
-                            <div style="text-align: center; padding: 60px 20px;">
-                                <div style="font-size: 3em; margin-bottom: 20px; opacity: 0.3;">🔍</div>
-                                <h3 style="color: var(--text-secondary);">
-                                    No hay inversiones que coincidan con los filtros
-                                </h3>
-                                <p style="color: var(--text-muted);">
-                                    Prueba cambiando los filtros o limpiándolos
-                                </p>
-                            </div>
-                        `;
-                    }
-                }
+                console.log('❌ No hay inversiones filtradas');
                 return;
             }
             
-            // Si hay inversiones filtradas, renderizar benchmarks normalmente
-            // pero solo con las inversiones filtradas
-            renderBenchmarks();
+            // Calcular TIR ponderada con inversiones filtradas
+            let tirPonderada = 0;
+            let valorTotal = 0;
+            
+            filtradas.forEach(inv => {
+                const tir = calcularTIR(inv);
+                const peso = getValorActual(inv);
+                console.log(`  - ${inv.nombre}: TIR=${tir.toFixed(2)}%, Valor=€${peso.toFixed(2)}`);
+                tirPonderada += tir * peso;
+                valorTotal += peso;
+            });
+            
+            tirPonderada = valorTotal > 0 ? tirPonderada / valorTotal : 0;
+            
+            console.log('TIR Portfolio Filtrado:', tirPonderada.toFixed(2) + '%');
+            console.log('Valor Total Filtrado: €', valorTotal.toFixed(2));
+            
+            // Actualizar el gráfico de benchmarks con el TIR filtrado
+            const ctx = document.getElementById('benchmarkChart');
+            if (!ctx) {
+                console.error('❌ No se encontró benchmarkChart');
+                return;
+            }
+            
+            console.log('✓ Canvas encontrado, actualizando gráfico...');
+
+            // Destruir gráfico anterior si existe
+            if (charts.benchmark) {
+                console.log('✓ Destruyendo gráfico anterior...');
+                charts.benchmark.destroy();
+            }
+
+            const labels = ['Tu Portfolio', 'S&P 500', 'MSCI World', 'Euro Stoxx 50', 'Bonos'];
+            const data = [
+                tirPonderada,
+                benchmarks.SP500.rentabilidad,
+                benchmarks.MSCI_WORLD.rentabilidad,
+                benchmarks.EUROSTOXX50.rentabilidad,
+                benchmarks.BONOS_GLOBAL.rentabilidad
+            ];
+            
+            console.log('Datos del gráfico:', data);
+
+            charts.benchmark = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels,
+                    datasets: [{
+                        label: 'Rentabilidad Anualizada (%)',
+                        data,
+                        backgroundColor: [
+                            '#00c9a7',
+                            '#4d9aff',
+                            '#a78bfa',
+                            '#f5a623',
+                            '#ff4d6a'
+                        ]
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        legend: { display: false }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                callback: (value) => value + '%'
+                            }
+                        }
+                    }
+                }
+            });
+
+            console.log('✓ Nuevo gráfico creado');
+
+            // Actualizar comparación detallada
+            const html = Object.entries(benchmarks).map(([key, bench]) => {
+                const diferencia = tirPonderada - bench.rentabilidad;
+                const color = diferencia >= 0 ? '#00c9a7' : '#ff4d6a';
+                
+                return `
+                    <div class="benchmark-card">
+                        <h4 style="margin-bottom: 10px;">${bench.nombre}</h4>
+                        <div style="font-size: 0.85em; color: var(--text-secondary); margin-bottom: 5px;">
+                            Rentabilidad: ${bench.rentabilidad}% | Volatilidad: ${bench.volatilidad}%
+                        </div>
+                        <div style="font-size: 1.2em; font-weight: bold; color: ${color}; margin-top: 10px;">
+                            ${diferencia >= 0 ? '+' : ''}${diferencia.toFixed(2)}% vs tu portfolio
+                        </div>
+                    </div>
+                `;
+            }).join('');
+
+            document.getElementById('benchmarkComparison').innerHTML = html;
+            
+            console.log('✅ Gráfico de benchmarks actualizado completamente');
         }
 
 
